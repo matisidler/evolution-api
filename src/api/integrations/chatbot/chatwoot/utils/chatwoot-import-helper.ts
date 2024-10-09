@@ -170,6 +170,8 @@ class ChatwootImport {
   }
 
   public async getExistingSourceIds(sourceIds: string[]): Promise<Set<string>> {
+    // Add a small sleep time to wait for 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     const existingSourceIdsSet = new Set<string>();
     console.log('Source IDS:', sourceIds);
 
