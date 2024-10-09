@@ -1809,10 +1809,13 @@ export class ChatwootService {
 
   public async eventWhatsapp(event: string, instance: InstanceDto, body: any) {
     console.log('eventWhatsapp executed!');
+    console.log('Event:', event);
+    console.log('Instance:', instance.instanceName);
     try {
       const waInstance = this.waMonitor.waInstances[instance.instanceName];
 
       if (!waInstance) {
+        console.log('WA instance not found');
         this.logger.warn('wa instance not found');
         return null;
       }
@@ -1820,10 +1823,12 @@ export class ChatwootService {
       const client = await this.clientCw(instance);
 
       if (!client) {
+        console.log('Chatwoot client not found');
         this.logger.warn('client not found');
         return null;
       }
 
+      console.log('Checking ignore JIDs');
       if (this.provider?.ignoreJids && this.provider?.ignoreJids.length > 0) {
         const ignoreJids: any = this.provider?.ignoreJids;
 
@@ -1854,6 +1859,7 @@ export class ChatwootService {
         }
       }
 
+      console.log('Processing event:', event);
       if (event === 'contact.is_not_in_wpp') {
         console.log('contact.is_not_in_wpp executed!');
         const getConversation = await this.createConversation(instance, body);
@@ -1877,6 +1883,7 @@ export class ChatwootService {
       }
 
       if (event === 'messages.upsert' || event === 'send.message') {
+        console.log('Processing messages.upsert or send.message');
         if (body.key.remoteJid === 'status@broadcast') {
           return;
         }
@@ -1894,6 +1901,9 @@ export class ChatwootService {
               .replaceAll(/_((?!\s)([^\n_]+?)(?<!\s))_/g, '*$1*')
               .replaceAll(/~((?!\s)([^\n~]+?)(?<!\s))~/g, '~~$1~~')
           : originalMessage;
+
+        console.log('Original message:', originalMessage);
+        console.log('Body message:', bodyMessage);
 
         if (bodyMessage && bodyMessage.includes('Por favor, classifique esta conversa, http')) {
           return;
@@ -1931,13 +1941,18 @@ export class ChatwootService {
         const getConversation = await this.createConversation(instance, body);
 
         if (!getConversation) {
+          console.log('Conversation not found');
           this.logger.warn('conversation not found');
           return;
         }
 
         const messageType = body.key.fromMe ? 'outgoing' : 'incoming';
 
+        console.log('Conversation ID:', getConversation);
+        console.log('Message type:', messageType);
+
         if (isMedia) {
+          console.log('Processing media message');
           const downloadBase64 = await waInstance?.getBase64FromMediaMessage({
             message: {
               ...body,
@@ -1976,7 +1991,7 @@ export class ChatwootService {
             } else {
               content = `${bodyMessage}`;
             }
-
+            console.log('sendData executed! 1');
             const send = await this.sendData(
               getConversation,
               fileStream,
@@ -1996,6 +2011,7 @@ export class ChatwootService {
 
             return send;
           } else {
+            console.log('sendData executed! 2');
             const send = await this.sendData(
               getConversation,
               fileStream,
@@ -2018,6 +2034,7 @@ export class ChatwootService {
         }
 
         if (reactionMessage) {
+          console.log('Processing reaction message');
           if (reactionMessage.text) {
             const send = await this.createMessage(
               instance,
@@ -2042,6 +2059,7 @@ export class ChatwootService {
         }
 
         if (adsMessage) {
+          console.log('Processing ads message');
           const imgBuffer = await axios.get(adsMessage.thumbnailUrl, { responseType: 'arraybuffer' });
 
           const extension = mime.getExtension(imgBuffer.headers['content-type']);
@@ -2093,6 +2111,7 @@ export class ChatwootService {
         }
 
         if (body.key.remoteJid.includes('@g.us')) {
+          console.log('Processing group message');
           const participantName = body.pushName;
 
           let content: string;
@@ -2122,6 +2141,7 @@ export class ChatwootService {
 
           return send;
         } else {
+          console.log('Processing individual message');
           const send = await this.createMessage(
             instance,
             getConversation,
@@ -2144,6 +2164,7 @@ export class ChatwootService {
       }
 
       if (event === Events.MESSAGES_DELETE) {
+        console.log('Processing message delete event');
         const chatwootDelete = this.configService.get<Chatwoot>('CHATWOOT').MESSAGE_DELETE;
 
         if (chatwootDelete === true) {
@@ -2175,6 +2196,7 @@ export class ChatwootService {
       }
 
       if (event === 'messages.edit') {
+        console.log('Processing message edit event');
         const editedText = `${
           body?.editedMessage?.conversation || body?.editedMessage?.extendedTextMessage?.text
         }\n\n_\`${i18next.t('cw.message.edited')}.\`_`;
@@ -2211,6 +2233,7 @@ export class ChatwootService {
       }
 
       if (event === 'messages.read') {
+        console.log('Processing message read event');
         if (!body?.key?.id || !body?.key?.remoteJid) {
           this.logger.warn('message id not found');
           return;
@@ -2250,6 +2273,7 @@ export class ChatwootService {
       }
 
       if (event === 'status.instance') {
+        console.log('Processing status.instance event');
         const data = body;
         const inbox = await this.getInbox(instance);
 
@@ -2267,9 +2291,9 @@ export class ChatwootService {
       }
 
       if (event === 'connection.update') {
+        console.log('Processing connection.update event');
         if (body.status === 'open') {
-          // if we have qrcode count then we understand that a new connection was established
-          if (this.waMonitor.waInstances[instance.instanceName].qrCode.count > 0) {
+          // if          if (this.waMonitor.waInstances[instance.instanceName].qrCode.count > 0) {
             const msgConnection = i18next.t('cw.inbox.connected');
             await this.createBotMessage(instance, msgConnection, 'incoming');
             this.waMonitor.waInstances[instance.instanceName].qrCode.count = 0;
@@ -2279,6 +2303,7 @@ export class ChatwootService {
       }
 
       if (event === 'qrcode.updated') {
+        console.log('Processing qrcode.updated event');
         if (body.statusCode === 500) {
           const erroQRcode = `🚨 ${i18next.t('qrlimitreached')}`;
           return await this.createBotMessage(instance, erroQRcode, 'incoming');
@@ -2313,6 +2338,7 @@ export class ChatwootService {
         }
       }
     } catch (error) {
+      console.log('Error in eventWhatsapp:', error);
       this.logger.error(error);
     }
   }
