@@ -173,6 +173,7 @@ class ChatwootImport {
     const existingSourceIdsSet = new Set<string>();
 
     if (sourceIds.length === 0) {
+      console.log('sourceIds.length is 0');
       return existingSourceIdsSet;
     }
 
@@ -180,10 +181,12 @@ class ChatwootImport {
     const query = 'SELECT source_id FROM messages WHERE source_id = ANY($1)';
     const pgClient = postgresClient.getChatwootConnection();
     const result = await pgClient.query(query, [formattedSourceIds]);
+    console.log('result.rows:', result.rows);
 
     for (const row of result.rows) {
       existingSourceIdsSet.add(row.source_id);
     }
+    console.log('existingSourceIdsSet:', existingSourceIdsSet);
 
     return existingSourceIdsSet;
   }
