@@ -2293,7 +2293,7 @@ export class ChatwootService {
       if (event === 'connection.update') {
         console.log('Processing connection.update event');
         if (body.status === 'open') {
-          // if          if (this.waMonitor.waInstances[instance.instanceName].qrCode.count > 0) {
+          if (this.waMonitor.waInstances[instance.instanceName].qrCode.count > 0) {
             const msgConnection = i18next.t('cw.inbox.connected');
             await this.createBotMessage(instance, msgConnection, 'incoming');
             this.waMonitor.waInstances[instance.instanceName].qrCode.count = 0;
