@@ -932,12 +932,17 @@ export class ChatwootService {
     sourceId?: string,
     quotedMsg?: MessageModel,
   ) {
+    console.log('sendData executed from function!');
     if (sourceId && this.isImportHistoryAvailable()) {
+      console.log('sourceId and isImportHistoryAvailable are true');
       const messageAlreadySaved = await chatwootImport.getExistingSourceIds([sourceId]);
+      console.log('messageAlreadySaved:', messageAlreadySaved);
       if (messageAlreadySaved.size > 0) {
         this.logger.warn('Message already saved on chatwoot');
         return null;
       }
+    } else {
+      console.log('sourceId and isImportHistoryAvailable are false');
     }
     const data = new FormData();
 
