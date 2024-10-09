@@ -1808,6 +1808,7 @@ export class ChatwootService {
   }
 
   public async eventWhatsapp(event: string, instance: InstanceDto, body: any) {
+    console.log('eventWhatsapp executed!');
     try {
       const waInstance = this.waMonitor.waInstances[instance.instanceName];
 
