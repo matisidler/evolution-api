@@ -545,6 +545,7 @@ export class ChatwootService {
 
   public async createConversation(instance: InstanceDto, body: any) {
     try {
+      console.log('createConversation executed!');
       this.logger.verbose('--- Start createConversation ---');
       this.logger.verbose(`Instance: ${JSON.stringify(instance)}`);
 
@@ -1853,6 +1854,7 @@ export class ChatwootService {
       }
 
       if (event === 'contact.is_not_in_wpp') {
+        console.log('contact.is_not_in_wpp executed!');
         const getConversation = await this.createConversation(instance, body);
 
         if (!getConversation) {
@@ -1924,6 +1926,7 @@ export class ChatwootService {
           return;
         }
 
+        console.log('contact.is_not_in_wpp was not executed!');
         const getConversation = await this.createConversation(instance, body);
 
         if (!getConversation) {
