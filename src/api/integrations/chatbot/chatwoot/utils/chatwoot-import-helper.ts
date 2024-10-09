@@ -171,6 +171,7 @@ class ChatwootImport {
 
   public async getExistingSourceIds(sourceIds: string[]): Promise<Set<string>> {
     const existingSourceIdsSet = new Set<string>();
+    console.log('Source IDS:', sourceIds);
 
     if (sourceIds.length === 0) {
       console.log('sourceIds.length is 0');
