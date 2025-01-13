@@ -2073,6 +2073,7 @@ export class BaileysStartupService extends ChannelStartupService {
     options?: Options,
     isIntegration = false,
   ) {
+    this.logger.debug(`[AUDIO_DEBUG] sendMessageWithTyping called. isIntegration: ${isIntegration}, messageType: ${Object.keys(message as any)[0]}`);
     let lastError: any;
     
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
@@ -2182,6 +2183,7 @@ export class BaileysStartupService extends ChannelStartupService {
           messageSent?.message?.audioMessage;
 
         if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && !isIntegration) {
+          this.logger.debug('[AUDIO_DEBUG] Chatwoot is enabled, sending event');
           this.chatwootService.eventWhatsapp(
             Events.SEND_MESSAGE,
             { instanceName: this.instance.name, instanceId: this.instanceId },
@@ -2284,6 +2286,7 @@ export class BaileysStartupService extends ChannelStartupService {
         this.sendDataWebhook(Events.SEND_MESSAGE, messageRaw);
 
         if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && isIntegration) {
+          this.logger.debug('[AUDIO_DEBUG] Message is from integration, using chatbotController.emit');
           await chatbotController.emit({
             instance: { instanceName: this.instance.name, instanceId: this.instanceId },
             remoteJid: messageRaw.key.remoteJid,
@@ -2915,49 +2918,56 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
+    this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. isIntegration: ${isIntegration}`);
     const mediaData: SendAudioDto = { ...data };
 
     if (file?.buffer) {
-      mediaData.audio = file.buffer.toString('base64');
+        this.logger.debug('[AUDIO_DEBUG] Using file buffer for audio');
+        mediaData.audio = file.buffer.toString('base64');
     } else if (!isURL(data.audio) && !isBase64(data.audio)) {
-      console.error('Invalid file or audio source');
-      throw new BadRequestException('File buffer, URL, or base64 audio is required');
+        console.error('Invalid file or audio source');
+        throw new BadRequestException('File buffer, URL, or base64 audio is required');
     }
 
     if (!data?.encoding && data?.encoding !== false) {
-      data.encoding = true;
+        data.encoding = true;
     }
+
+    this.logger.debug(`[AUDIO_DEBUG] Audio encoding enabled: ${data.encoding}`);
 
     if (data?.encoding) {
-      const convert = await this.processAudio(mediaData.audio);
+        this.logger.debug('[AUDIO_DEBUG] Starting audio processing');
+        const convert = await this.processAudio(mediaData.audio);
 
-      if (Buffer.isBuffer(convert)) {
-        const result = this.sendMessageWithTyping<AnyMessageContent>(
-          data.number,
-          {
-            audio: convert,
-            ptt: true,
-            mimetype: 'audio/ogg; codecs=opus',
-          },
-          { presence: 'recording', delay: data?.delay },
-          isIntegration,
-        );
+        if (Buffer.isBuffer(convert)) {
+            this.logger.debug('[AUDIO_DEBUG] Audio successfully converted, sending message');
+            const result = this.sendMessageWithTyping<AnyMessageContent>(
+                data.number,
+                {
+                    audio: convert,
+                    ptt: true,
+                    mimetype: 'audio/ogg; codecs=opus',
+                },
+                { presence: 'recording', delay: data?.delay },
+                isIntegration,
+            );
 
-        return result;
-      } else {
-        throw new InternalServerErrorException('Failed to convert audio');
-      }
+            return result;
+        } else {
+            throw new InternalServerErrorException('Failed to convert audio');
+        }
     }
 
+    this.logger.debug('[AUDIO_DEBUG] Sending audio without encoding');
     return await this.sendMessageWithTyping<AnyMessageContent>(
-      data.number,
-      {
-        audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
-        ptt: true,
-        mimetype: 'audio/ogg; codecs=opus',
-      },
-      { presence: 'recording', delay: data?.delay },
-      isIntegration,
+        data.number,
+        {
+            audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
+            ptt: true,
+            mimetype: 'audio/ogg; codecs=opus',
+        },
+        { presence: 'recording', delay: data?.delay },
+        isIntegration,
     );
   }
 
