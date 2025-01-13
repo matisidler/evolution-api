@@ -1179,6 +1179,12 @@ export class ChatwootService {
       await new Promise((resolve) => setTimeout(resolve, 500));
       console.log("Full body: ", body)
       console.log("Full instance: ", instance)
+      try {
+        console.log("DEBUG: Processing message with ID: ", body.id)
+        console.log("DEBUG: Attachments from body: ", body.conversation.messages[0].attachments)
+      } catch (error) {
+        console.log("DEBUG: Error getting body: ", error)
+      }
       const client = await this.clientCw(instance);
 
       if (!client) {
