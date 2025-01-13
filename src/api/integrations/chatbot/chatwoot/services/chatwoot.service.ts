@@ -1182,6 +1182,8 @@ export class ChatwootService {
       try {
         console.log("DEBUG: Processing message with ID: ", body.id)
         console.log("DEBUG: Attachments from body: ", body.conversation.messages[0].attachments)
+        console.log("DEBUG Meta sender: ", body.conversation.meta.sender)
+        console.log("DEBUG Messages: ", body.conversation.messages)
       } catch (error) {
         console.log("DEBUG: Error getting body: ", error)
       }
