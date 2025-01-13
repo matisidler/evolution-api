@@ -269,7 +269,10 @@ export class BaileysStartupService extends ChannelStartupService {
 
   public async getProfileStatus() {
     const statusResult = await this.client.fetchStatus(this.instance.wuid);
-    return statusResult ? statusResult.status : null;
+    if (Array.isArray(statusResult)) {
+      return statusResult[0]?.status ?? null;
+    }
+    return statusResult?.status ?? null;
   }
 
   public get profilePictureUrl() {
@@ -1785,7 +1788,7 @@ export class BaileysStartupService extends ChannelStartupService {
       const statusResult = await this.client.fetchStatus(jid);
       return {
         wuid: jid,
-        status: statusResult ? statusResult.status : null,
+        status: Array.isArray(statusResult) ? statusResult[0]?.status ?? null : statusResult?.status ?? null,
       };
     } catch (error) {
       return {
