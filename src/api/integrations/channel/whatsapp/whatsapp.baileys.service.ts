@@ -2078,6 +2078,7 @@ export class BaileysStartupService extends ChannelStartupService {
   ) {
     const isAudioMessage = (message as any)?.audio || (message as any)?.audioMessage;
     this.logger.debug(`[AUDIO_DEBUG] sendMessageWithTyping called. isIntegration: ${isIntegration}, isAudioMessage: ${!!isAudioMessage}, messageType: ${Object.keys(message as any)[0]}`);
+    console.log("Full Message", message);
     
     let lastError: any;
     
