@@ -4337,7 +4337,7 @@ export class BaileysStartupService extends ChannelStartupService {
       const prepare = (message: any) => this.prepareMessage(message);
       this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
 
-      const task = cron.schedule('0,30 * * * *', async () => {
+      const task = cron.schedule('*/10 * * * *', async () => {
         this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
       });
       task.start();
