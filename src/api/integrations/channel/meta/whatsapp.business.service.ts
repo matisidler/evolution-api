@@ -49,6 +49,9 @@ export class BusinessStartupService extends ChannelStartupService {
   public phoneNumber: string;
   public mobile: boolean;
 
+  private readonly maxRetries = 10;
+  private readonly retryDelay = 1000; // 1 second in milliseconds
+
   public get connectionStatus() {
     return this.stateConnection;
   }
@@ -1052,60 +1055,92 @@ export class BusinessStartupService extends ChannelStartupService {
   }
 
   public async processAudio(audio: string, number: string) {
-    number = number.replace(/\D/g, '');
-    const hash = `${number}-${new Date().getTime()}`;
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        number = number.replace(/\D/g, '');
+        const hash = `${number}-${new Date().getTime()}`;
 
-    let mimetype: string;
+        let mimetype: string;
 
-    const prepareMedia: any = {
-      fileName: `${hash}.mp3`,
-      mediaType: 'audio',
-      media: audio,
-    };
+        const prepareMedia: any = {
+          fileName: `${hash}.mp3`,
+          mediaType: 'audio',
+          media: audio,
+        };
 
-    if (isURL(audio)) {
-      mimetype = mime.getType(audio);
-      prepareMedia.id = audio;
-      prepareMedia.type = 'link';
-    } else {
-      mimetype = mime.getType(prepareMedia.fileName);
-      const id = await this.getIdMedia(prepareMedia);
-      prepareMedia.id = id;
-      prepareMedia.type = 'id';
+        if (isURL(audio)) {
+          mimetype = mime.getType(audio);
+          prepareMedia.id = audio;
+          prepareMedia.type = 'link';
+        } else {
+          mimetype = mime.getType(prepareMedia.fileName);
+          const id = await this.getIdMedia(prepareMedia);
+          prepareMedia.id = id;
+          prepareMedia.type = 'id';
+        }
+
+        prepareMedia.mimetype = mimetype;
+
+        return prepareMedia;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to process audio: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
+      }
     }
 
-    prepareMedia.mimetype = mimetype;
-
-    return prepareMedia;
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
-    const mediaData: SendAudioDto = { ...data };
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const mediaData: SendAudioDto = { ...data };
 
-    if (file?.buffer) {
-      mediaData.audio = file.buffer.toString('base64');
-    } else {
-      console.error('El archivo no tiene buffer o file es undefined');
-      throw new Error('File or buffer is undefined');
+        if (file?.buffer) {
+          mediaData.audio = file.buffer.toString('base64');
+        } else {
+          console.error('El archivo no tiene buffer o file es undefined');
+          throw new Error('File or buffer is undefined');
+        }
+
+        const message = await this.processAudio(mediaData.audio, data.number);
+
+        const audioSent = await this.sendMessageWithTyping(
+          data.number,
+          { ...message },
+          {
+            delay: data?.delay,
+            presence: 'composing',
+            quoted: data?.quoted,
+            linkPreview: data?.linkPreview,
+            mentionsEveryOne: data?.mentionsEveryOne,
+            mentioned: data?.mentioned,
+          },
+          isIntegration,
+        );
+
+        return audioSent;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to send audio: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
+      }
     }
 
-    const message = await this.processAudio(mediaData.audio, data.number);
-
-    const audioSent = await this.sendMessageWithTyping(
-      data.number,
-      { ...message },
-      {
-        delay: data?.delay,
-        presence: 'composing',
-        quoted: data?.quoted,
-        linkPreview: data?.linkPreview,
-        mentionsEveryOne: data?.mentionsEveryOne,
-        mentioned: data?.mentioned,
-      },
-      isIntegration,
-    );
-
-    return audioSent;
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   public async buttonMessage(data: SendButtonsDto) {

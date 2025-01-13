@@ -380,45 +380,59 @@ export class EvolutionStartupService extends ChannelStartupService {
     return res;
   }
 
+  private readonly maxRetries = 10;
+  private readonly retryDelay = 1000; // 1 second in milliseconds
+
   protected async prepareMediaMessage(mediaMessage: MediaMessage) {
-    try {
-      if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
-        const regex = new RegExp(/.*\/(.+?)\./);
-        const arrayMatch = regex.exec(mediaMessage.media);
-        mediaMessage.fileName = arrayMatch[1];
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
+          const regex = new RegExp(/.*\/(.+?)\./);
+          const arrayMatch = regex.exec(mediaMessage.media);
+          mediaMessage.fileName = arrayMatch[1];
+        }
+
+        if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'image.png';
+        }
+
+        if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'video.mp4';
+        }
+
+        let mimetype: string;
+
+        const prepareMedia: any = {
+          caption: mediaMessage?.caption,
+          fileName: mediaMessage.fileName,
+          mediaType: mediaMessage.mediatype,
+          media: mediaMessage.media,
+          gifPlayback: false,
+        };
+
+        if (isURL(mediaMessage.media)) {
+          mimetype = mime.getType(mediaMessage.media);
+        } else {
+          mimetype = mime.getType(mediaMessage.fileName);
+        }
+
+        prepareMedia.mimetype = mimetype;
+
+        return prepareMedia;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to prepare media message: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
       }
-
-      if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'image.png';
-      }
-
-      if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'video.mp4';
-      }
-
-      let mimetype: string;
-
-      const prepareMedia: any = {
-        caption: mediaMessage?.caption,
-        fileName: mediaMessage.fileName,
-        mediaType: mediaMessage.mediatype,
-        media: mediaMessage.media,
-        gifPlayback: false,
-      };
-
-      if (isURL(mediaMessage.media)) {
-        mimetype = mime.getType(mediaMessage.media);
-      } else {
-        mimetype = mime.getType(mediaMessage.fileName);
-      }
-
-      prepareMedia.mimetype = mimetype;
-
-      return prepareMedia;
-    } catch (error) {
-      this.logger.error(error);
-      throw new InternalServerErrorException(error?.toString() || error);
     }
+
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   public async mediaMessage(data: SendMediaDto, file?: any, isIntegration = false) {
@@ -446,26 +460,42 @@ export class EvolutionStartupService extends ChannelStartupService {
   }
 
   public async processAudio(audio: string, number: string) {
-    number = number.replace(/\D/g, '');
-    const hash = `${number}-${new Date().getTime()}`;
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        number = number.replace(/\D/g, '');
+        const hash = `${number}-${new Date().getTime()}`;
 
-    let mimetype: string;
+        let mimetype: string;
 
-    const prepareMedia: any = {
-      fileName: `${hash}.mp4`,
-      mediaType: 'audio',
-      media: audio,
-    };
+        const prepareMedia: any = {
+          fileName: `${hash}.mp4`,
+          mediaType: 'audio',
+          media: audio,
+        };
 
-    if (isURL(audio)) {
-      mimetype = mime.getType(audio);
-    } else {
-      mimetype = mime.getType(prepareMedia.fileName);
+        if (isURL(audio)) {
+          mimetype = mime.getType(audio);
+        } else {
+          mimetype = mime.getType(prepareMedia.fileName);
+        }
+
+        prepareMedia.mimetype = mimetype;
+
+        return prepareMedia;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to process audio: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
+      }
     }
 
-    prepareMedia.mimetype = mimetype;
-
-    return prepareMedia;
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {

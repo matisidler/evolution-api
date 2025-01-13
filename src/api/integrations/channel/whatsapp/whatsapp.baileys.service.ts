@@ -2036,248 +2036,248 @@ export class BaileysStartupService extends ChannelStartupService {
     );
   }
 
+  private readonly maxRetries = 10;
+  private readonly retryDelay = 1000; // 1 second in milliseconds
+
   private async sendMessageWithTyping<T = proto.IMessage>(
     number: string,
     message: T,
     options?: Options,
     isIntegration = false,
   ) {
-    const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
 
-    if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
-      throw new BadRequestException(isWA);
-    }
-
-    const sender = isWA.jid.toLowerCase();
-
-    this.logger.verbose(`Sending message to ${sender}`);
-
-    try {
-      if (options?.delay) {
-        this.logger.verbose(`Typing for ${options.delay}ms to ${sender}`);
-        if (options.delay > 20000) {
-          let remainingDelay = options.delay;
-          while (remainingDelay > 20000) {
-            await this.client.presenceSubscribe(sender);
-
-            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-            await delay(20000);
-
-            await this.client.sendPresenceUpdate('paused', sender);
-
-            remainingDelay -= 20000;
-          }
-          if (remainingDelay > 0) {
-            await this.client.presenceSubscribe(sender);
-
-            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-            await delay(remainingDelay);
-
-            await this.client.sendPresenceUpdate('paused', sender);
-          }
-        } else {
-          await this.client.presenceSubscribe(sender);
-
-          await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-          await delay(options.delay);
-
-          await this.client.sendPresenceUpdate('paused', sender);
-        }
-      }
-
-      const linkPreview = options?.linkPreview != false ? undefined : false;
-
-      let quoted: WAMessage;
-
-      if (options?.quoted) {
-        const m = options?.quoted;
-
-        const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
-
-        if (msg) {
-          quoted = msg;
-        }
-      }
-
-      let messageSent: WAMessage;
-
-      let mentions: string[];
-      if (isJidGroup(sender)) {
-        let group;
-        try {
-          const cache = this.configService.get<CacheConf>('CACHE');
-          if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED) group = await this.findGroup({ groupJid: sender }, 'inner');
-          else group = await this.getGroupMetadataCache(sender);
-        } catch (error) {
-          throw new NotFoundException('Group not found');
+        if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
+          throw new BadRequestException(isWA);
         }
 
-        if (!group) {
-          throw new NotFoundException('Group not found');
-        }
+        const sender = isWA.jid.toLowerCase();
 
-        if (options?.mentionsEveryOne) {
-          mentions = group.participants.map((participant) => participant.id);
-        } else if (options.mentioned?.length) {
-          mentions = options.mentioned.map((mention) => {
-            const jid = this.createJid(mention);
-            if (isJidGroup(jid)) {
-              return null;
+        this.logger.verbose(`Sending message to ${sender}`);
+
+        if (options?.delay) {
+          this.logger.verbose(`Typing for ${options.delay}ms to ${sender}`);
+          if (options.delay > 20000) {
+            let remainingDelay = options.delay;
+            while (remainingDelay > 20000) {
+              await this.client.presenceSubscribe(sender);
+              await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+              await delay(20000);
+              await this.client.sendPresenceUpdate('paused', sender);
+              remainingDelay -= 20000;
             }
-            return jid;
+            if (remainingDelay > 0) {
+              await this.client.presenceSubscribe(sender);
+              await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+              await delay(remainingDelay);
+              await this.client.sendPresenceUpdate('paused', sender);
+            }
+          } else {
+            await this.client.presenceSubscribe(sender);
+            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+            await delay(options.delay);
+            await this.client.sendPresenceUpdate('paused', sender);
+          }
+        }
+
+        const linkPreview = options?.linkPreview != false ? undefined : false;
+        let quoted: WAMessage;
+
+        if (options?.quoted) {
+          const m = options?.quoted;
+          const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
+          if (msg) {
+            quoted = msg;
+          }
+        }
+
+        let messageSent: WAMessage;
+        let mentions: string[];
+
+        if (isJidGroup(sender)) {
+          let group;
+          try {
+            const cache = this.configService.get<CacheConf>('CACHE');
+            if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED) group = await this.findGroup({ groupJid: sender }, 'inner');
+            else group = await this.getGroupMetadataCache(sender);
+          } catch (error) {
+            throw new NotFoundException('Group not found');
+          }
+
+          if (!group) {
+            throw new NotFoundException('Group not found');
+          }
+
+          if (options?.mentionsEveryOne) {
+            mentions = group.participants.map((participant) => participant.id);
+          } else if (options.mentioned?.length) {
+            mentions = options.mentioned.map((mention) => {
+              const jid = this.createJid(mention);
+              if (isJidGroup(jid)) {
+                return null;
+              }
+              return jid;
+            });
+          }
+
+          messageSent = await this.sendMessage(
+            sender,
+            message,
+            mentions,
+            linkPreview,
+            quoted,
+            null,
+            group?.ephemeralDuration,
+          );
+        } else {
+          messageSent = await this.sendMessage(sender, message, mentions, linkPreview, quoted);
+        }
+
+        if (Long.isLong(messageSent?.messageTimestamp)) {
+          messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
+        }
+
+        const messageRaw = this.prepareMessage(messageSent);
+
+        const isMedia =
+          messageSent?.message?.imageMessage ||
+          messageSent?.message?.videoMessage ||
+          messageSent?.message?.stickerMessage ||
+          messageSent?.message?.ptvMessage ||
+          messageSent?.message?.documentMessage ||
+          messageSent?.message?.documentWithCaptionMessage ||
+          messageSent?.message?.ptvMessage ||
+          messageSent?.message?.audioMessage;
+
+        if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && !isIntegration) {
+          this.chatwootService.eventWhatsapp(
+            Events.SEND_MESSAGE,
+            { instanceName: this.instance.name, instanceId: this.instanceId },
+            messageRaw,
+          );
+        }
+
+        if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
+          const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+            where: {
+              instanceId: this.instanceId,
+            },
+            include: {
+              OpenaiCreds: true,
+            },
+          });
+
+          if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+            messageRaw.message.speechToText = await this.openaiService.speechToText(
+              openAiDefaultSettings.OpenaiCreds,
+              messageRaw,
+              this.client.updateMediaMessage,
+            );
+          }
+        }
+
+        if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
+          const msg = await this.prismaRepository.message.create({
+            data: messageRaw,
+          });
+
+          if (isMedia && this.configService.get<S3>('S3').ENABLE) {
+            try {
+              const message: any = messageRaw;
+              const media = await this.getBase64FromMediaMessage(
+                {
+                  message,
+                },
+                true,
+              );
+
+              const { buffer, mediaType, fileName, size } = media;
+
+              const mimetype = mime.getType(fileName).toString();
+
+              const fullName = join(
+                `${this.instance.id}`,
+                messageRaw.key.remoteJid,
+                `${messageRaw.key.id}`,
+                mediaType,
+                fileName,
+              );
+
+              await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
+                'Content-Type': mimetype,
+              });
+
+              await this.prismaRepository.media.create({
+                data: {
+                  messageId: msg.id,
+                  instanceId: this.instanceId,
+                  type: mediaType,
+                  fileName: fullName,
+                  mimetype,
+                },
+              });
+
+              const mediaUrl = await s3Service.getObjectUrl(fullName);
+
+              messageRaw.message.mediaUrl = mediaUrl;
+
+              await this.prismaRepository.message.update({
+                where: { id: msg.id },
+                data: messageRaw,
+              });
+            } catch (error) {
+              this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
+            }
+          }
+        }
+
+        if (this.localWebhook.enabled) {
+          if (isMedia && this.localWebhook.webhookBase64) {
+            const buffer = await downloadMediaMessage(
+              { key: messageRaw.key, message: messageRaw?.message },
+              'buffer',
+              {},
+              {
+                logger: P({ level: 'error' }) as any,
+                reuploadRequest: this.client.updateMediaMessage,
+              },
+            );
+
+            messageRaw.message.base64 = buffer ? buffer.toString('base64') : undefined;
+          }
+        }
+
+        this.logger.log(messageRaw);
+
+        this.sendDataWebhook(Events.SEND_MESSAGE, messageRaw);
+
+        if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && isIntegration) {
+          await chatbotController.emit({
+            instance: { instanceName: this.instance.name, instanceId: this.instanceId },
+            remoteJid: messageRaw.key.remoteJid,
+            msg: messageRaw,
+            pushName: messageRaw.pushName,
+            isIntegration,
           });
         }
 
-        messageSent = await this.sendMessage(
-          sender,
-          message,
-          mentions,
-          linkPreview,
-          quoted,
-          null,
-          group?.ephemeralDuration,
-          // group?.participants,
-        );
-      } else {
-        messageSent = await this.sendMessage(sender, message, mentions, linkPreview, quoted);
-      }
-
-      if (Long.isLong(messageSent?.messageTimestamp)) {
-        messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
-      }
-
-      const messageRaw = this.prepareMessage(messageSent);
-
-      const isMedia =
-        messageSent?.message?.imageMessage ||
-        messageSent?.message?.videoMessage ||
-        messageSent?.message?.stickerMessage ||
-        messageSent?.message?.ptvMessage ||
-        messageSent?.message?.documentMessage ||
-        messageSent?.message?.documentWithCaptionMessage ||
-        messageSent?.message?.ptvMessage ||
-        messageSent?.message?.audioMessage;
-
-      if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && !isIntegration) {
-        this.chatwootService.eventWhatsapp(
-          Events.SEND_MESSAGE,
-          { instanceName: this.instance.name, instanceId: this.instanceId },
-          messageRaw,
-        );
-      }
-
-      if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
-        const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-          where: {
-            instanceId: this.instanceId,
-          },
-          include: {
-            OpenaiCreds: true,
-          },
-        });
-
-        if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-          messageRaw.message.speechToText = await this.openaiService.speechToText(
-            openAiDefaultSettings.OpenaiCreds,
-            messageRaw,
-            this.client.updateMediaMessage,
-          );
+        return messageRaw;
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to send message: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
         }
       }
-
-      if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
-        const msg = await this.prismaRepository.message.create({
-          data: messageRaw,
-        });
-
-        if (isMedia && this.configService.get<S3>('S3').ENABLE) {
-          try {
-            const message: any = messageRaw;
-            const media = await this.getBase64FromMediaMessage(
-              {
-                message,
-              },
-              true,
-            );
-
-            const { buffer, mediaType, fileName, size } = media;
-
-            const mimetype = mime.getType(fileName).toString();
-
-            const fullName = join(
-              `${this.instance.id}`,
-              messageRaw.key.remoteJid,
-              `${messageRaw.key.id}`,
-              mediaType,
-              fileName,
-            );
-
-            await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
-              'Content-Type': mimetype,
-            });
-
-            await this.prismaRepository.media.create({
-              data: {
-                messageId: msg.id,
-                instanceId: this.instanceId,
-                type: mediaType,
-                fileName: fullName,
-                mimetype,
-              },
-            });
-
-            const mediaUrl = await s3Service.getObjectUrl(fullName);
-
-            messageRaw.message.mediaUrl = mediaUrl;
-
-            await this.prismaRepository.message.update({
-              where: { id: msg.id },
-              data: messageRaw,
-            });
-          } catch (error) {
-            this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
-          }
-        }
-      }
-
-      if (this.localWebhook.enabled) {
-        if (isMedia && this.localWebhook.webhookBase64) {
-          const buffer = await downloadMediaMessage(
-            { key: messageRaw.key, message: messageRaw?.message },
-            'buffer',
-            {},
-            {
-              logger: P({ level: 'error' }) as any,
-              reuploadRequest: this.client.updateMediaMessage,
-            },
-          );
-
-          messageRaw.message.base64 = buffer ? buffer.toString('base64') : undefined;
-        }
-      }
-
-      this.logger.log(messageRaw);
-
-      this.sendDataWebhook(Events.SEND_MESSAGE, messageRaw);
-
-      if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && isIntegration) {
-        await chatbotController.emit({
-          instance: { instanceName: this.instance.name, instanceId: this.instanceId },
-          remoteJid: messageRaw.key.remoteJid,
-          msg: messageRaw,
-          pushName: messageRaw.pushName,
-          isIntegration,
-        });
-      }
-
-      return messageRaw;
-    } catch (error) {
-      this.logger.error(error);
-      throw new BadRequestException(error.toString());
     }
+
+    throw new BadRequestException(lastError?.toString() || lastError);
   }
 
   // Instance Controller
@@ -2501,117 +2501,127 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   private async prepareMediaMessage(mediaMessage: MediaMessage) {
-    try {
-      const type = mediaMessage.mediatype === 'ptv' ? 'video' : mediaMessage.mediatype;
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const type = mediaMessage.mediatype === 'ptv' ? 'video' : mediaMessage.mediatype;
 
-      const prepareMedia = await prepareWAMessageMedia(
-        {
-          [type]: isURL(mediaMessage.media) ? { url: mediaMessage.media } : Buffer.from(mediaMessage.media, 'base64'),
-        } as any,
-        { upload: this.client.waUploadToServer },
-      );
-
-      const mediaType = mediaMessage.mediatype + 'Message';
-
-      if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
-        const regex = new RegExp(/.*\/(.+?)\./);
-        const arrayMatch = regex.exec(mediaMessage.media);
-        mediaMessage.fileName = arrayMatch[1];
-      }
-
-      if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'image.png';
-      }
-
-      if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'video.mp4';
-      }
-
-      let mimetype: string;
-
-      if (mediaMessage.mimetype) {
-        mimetype = mediaMessage.mimetype;
-      } else {
-        mimetype = mime.getType(mediaMessage.fileName);
-
-        if (!mimetype && isURL(mediaMessage.media)) {
-          let config: any = {
-            responseType: 'arraybuffer',
-          };
-
-          if (this.localProxy?.enabled) {
-            config = {
-              ...config,
-              httpsAgent: makeProxyAgent({
-                host: this.localProxy.host,
-                port: this.localProxy.port,
-                protocol: this.localProxy.protocol,
-                username: this.localProxy.username,
-                password: this.localProxy.password,
-              }),
-            };
-          }
-
-          const response = await axios.get(mediaMessage.media, config);
-
-          mimetype = response.headers['content-type'];
-        }
-      }
-
-      if (mediaMessage.mediatype === 'ptv') {
-        prepareMedia[mediaType] = prepareMedia[type + 'Message'];
-        mimetype = 'video/mp4';
-
-        if (!prepareMedia[mediaType]) {
-          throw new Error('Failed to prepare video message');
-        }
-
-        try {
-          let mediaInput;
-          if (isURL(mediaMessage.media)) {
-            mediaInput = mediaMessage.media;
-          } else {
-            const mediaBuffer = Buffer.from(mediaMessage.media, 'base64');
-            if (!mediaBuffer || mediaBuffer.length === 0) {
-              throw new Error('Invalid media buffer');
-            }
-            mediaInput = mediaBuffer;
-          }
-
-          const duration = await getVideoDuration(mediaInput);
-          if (!duration || duration <= 0) {
-            throw new Error('Invalid media duration');
-          }
-
-          this.logger.verbose(`Video duration: ${duration} seconds`);
-          prepareMedia[mediaType].seconds = duration;
-        } catch (error) {
-          this.logger.error('Error getting video duration:');
-          this.logger.error(error);
-          throw new Error(`Failed to get video duration: ${error.message}`);
-        }
-      }
-
-      prepareMedia[mediaType].caption = mediaMessage?.caption;
-      prepareMedia[mediaType].mimetype = mimetype;
-      prepareMedia[mediaType].fileName = mediaMessage.fileName;
-
-      if (mediaMessage.mediatype === 'video') {
-        prepareMedia[mediaType].jpegThumbnail = Uint8Array.from(
-          readFileSync(join(process.cwd(), 'public', 'images', 'video-cover.png')),
+        const prepareMedia = await prepareWAMessageMedia(
+          {
+            [type]: isURL(mediaMessage.media) ? { url: mediaMessage.media } : Buffer.from(mediaMessage.media, 'base64'),
+          } as any,
+          { upload: this.client.waUploadToServer },
         );
-        prepareMedia[mediaType].gifPlayback = false;
-      }
 
-      return generateWAMessageFromContent(
-        '',
-        { [mediaType]: { ...prepareMedia[mediaType] } },
-        { userJid: this.instance.wuid },
-      );
-    } catch (error) {
-      this.logger.error(error);
-      throw new InternalServerErrorException(error?.toString() || error);
+        const mediaType = mediaMessage.mediatype + 'Message';
+
+        if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
+          const regex = new RegExp(/.*\/(.+?)\./);
+          const arrayMatch = regex.exec(mediaMessage.media);
+          mediaMessage.fileName = arrayMatch[1];
+        }
+
+        if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'image.png';
+        }
+
+        if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'video.mp4';
+        }
+
+        let mimetype: string;
+
+        if (mediaMessage.mimetype) {
+          mimetype = mediaMessage.mimetype;
+        } else {
+          mimetype = mime.getType(mediaMessage.fileName);
+
+          if (!mimetype && isURL(mediaMessage.media)) {
+            let config: any = {
+              responseType: 'arraybuffer',
+            };
+
+            if (this.localProxy?.enabled) {
+              config = {
+                ...config,
+                httpsAgent: makeProxyAgent({
+                  host: this.localProxy.host,
+                  port: this.localProxy.port,
+                  protocol: this.localProxy.protocol,
+                  username: this.localProxy.username,
+                  password: this.localProxy.password,
+                }),
+              };
+            }
+
+            const response = await axios.get(mediaMessage.media, config);
+            mimetype = response.headers['content-type'];
+          }
+        }
+
+        if (mediaMessage.mediatype === 'ptv') {
+          prepareMedia[mediaType] = prepareMedia[type + 'Message'];
+          mimetype = 'video/mp4';
+
+          if (!prepareMedia[mediaType]) {
+            throw new Error('Failed to prepare video message');
+          }
+
+          try {
+            let mediaInput;
+            if (isURL(mediaMessage.media)) {
+              mediaInput = mediaMessage.media;
+            } else {
+              const mediaBuffer = Buffer.from(mediaMessage.media, 'base64');
+              if (!mediaBuffer || mediaBuffer.length === 0) {
+                throw new Error('Invalid media buffer');
+              }
+              mediaInput = mediaBuffer;
+            }
+
+            const duration = await getVideoDuration(mediaInput);
+            if (!duration || duration <= 0) {
+              throw new Error('Invalid media duration');
+            }
+
+            this.logger.verbose(`Video duration: ${duration} seconds`);
+            prepareMedia[mediaType].seconds = duration;
+          } catch (error) {
+            this.logger.error('Error getting video duration:');
+            this.logger.error(error);
+            throw new Error(`Failed to get video duration: ${error.message}`);
+          }
+        }
+
+        prepareMedia[mediaType].caption = mediaMessage?.caption;
+        prepareMedia[mediaType].mimetype = mimetype;
+        prepareMedia[mediaType].fileName = mediaMessage.fileName;
+
+        if (mediaMessage.mediatype === 'video') {
+          prepareMedia[mediaType].jpegThumbnail = Uint8Array.from(
+            readFileSync(join(process.cwd(), 'public', 'images', 'video-cover.png')),
+          );
+          prepareMedia[mediaType].gifPlayback = false;
+        }
+
+        return generateWAMessageFromContent(
+          '',
+          { [mediaType]: { ...prepareMedia[mediaType] } },
+          { userJid: this.instance.wuid },
+        );
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to prepare media message: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
+      }
     }
+
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   private async convertToWebP(image: string): Promise<Buffer> {

@@ -511,7 +511,7 @@ export class ConfigService {
         SEND_MEDIA_BASE64: process.env?.TYPEBOT_SEND_MEDIA_BASE64 === 'true',
       },
       CHATWOOT: {
-        ENABLED: process.env?.CHATWOOT_ENABLED === 'true',
+        ENABLED: true,
         MESSAGE_DELETE: process.env.CHATWOOT_MESSAGE_DELETE === 'true',
         MESSAGE_READ: process.env.CHATWOOT_MESSAGE_READ === 'true',
         BOT_CONTACT: !process.env.CHATWOOT_BOT_CONTACT || process.env.CHATWOOT_BOT_CONTACT === 'true',

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:18-alpine3.16 AS builder
 
 RUN apk update && \
     apk add git ffmpeg wget curl bash
@@ -29,7 +29,7 @@ RUN ./Docker/scripts/generate_database.sh
 
 RUN npm run build
 
-FROM node:20-alpine AS final
+FROM node:18-alpine3.16 AS final
 
 RUN apk update && \
     apk add tzdata ffmpeg bash
@@ -53,6 +53,4 @@ COPY --from=builder /evolution/tsup.config.ts ./tsup.config.ts
 
 ENV DOCKER_ENV=true
 
-EXPOSE 8080
-
-ENTRYPOINT ["/bin/bash", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod" ]
+ENTRYPOINT ["npm", "run", "start:prod"]
