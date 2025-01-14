@@ -1204,24 +1204,24 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (this.configService.get<Openai>('OPENAI').ENABLED && received?.message?.audioMessage) {
-            const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-              where: {
-                instanceId: this.instanceId,
-              },
-              include: {
-                OpenaiCreds: true,
-              },
-            });
+          // if (this.configService.get<Openai>('OPENAI').ENABLED && received?.message?.audioMessage) {
+          //   const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+          //     where: {
+          //       instanceId: this.instanceId,
+          //     },
+          //     include: {
+          //       OpenaiCreds: true,
+          //     },
+          //   });
 
-            if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-              messageRaw.message.speechToText = await this.openaiService.speechToText(
-                openAiDefaultSettings.OpenaiCreds,
-                received,
-                this.client.updateMediaMessage,
-              );
-            }
-          }
+          //   if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+          //     messageRaw.message.speechToText = await this.openaiService.speechToText(
+          //       openAiDefaultSettings.OpenaiCreds,
+          //       received,
+          //       this.client.updateMediaMessage,
+          //     );
+          //   }
+          // }
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
             const msg = await this.prismaRepository.message.create({
@@ -2211,24 +2211,24 @@ export class BaileysStartupService extends ChannelStartupService {
               }
             }
 
-            if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
-              const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-                where: {
-                  instanceId: this.instanceId,
-                },
-                include: {
-                  OpenaiCreds: true,
-                },
-              });
+            // if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
+            //   const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+            //     where: {
+            //       instanceId: this.instanceId,
+            //     },
+            //     include: {
+            //       OpenaiCreds: true,
+            //     },
+            //   });
 
-              if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-                messageRaw.message.speechToText = await this.openaiService.speechToText(
-                  openAiDefaultSettings.OpenaiCreds,
-                  messageRaw,
-                  this.client.updateMediaMessage,
-                );
-              }
-            }
+            //   if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+            //     messageRaw.message.speechToText = await this.openaiService.speechToText(
+            //       openAiDefaultSettings.OpenaiCreds,
+            //       messageRaw,
+            //       this.client.updateMediaMessage,
+            //     );
+            //   }
+            // }
 
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
               const msg = await this.prismaRepository.message.create({
@@ -4331,16 +4331,17 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   private async syncChatwootLostMessages() {
-    if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled) {
-      const chatwootConfig = await this.findChatwoot();
-      const prepare = (message: any) => this.prepareMessage(message);
-      this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
+    console.log("do nothing")
+    // if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled) {
+    //   const chatwootConfig = await this.findChatwoot();
+    //   const prepare = (message: any) => this.prepareMessage(message);
+    //   this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
 
-      const task = cron.schedule('0,30 * * * *', async () => {
-        this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
-      });
-      task.start();
-    }
+    //   const task = cron.schedule('0,30 * * * *', async () => {
+    //     this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
+    //   });
+    //   task.start();
+    // }
   }
 
   private async updateMessagesReadedByTimestamp(remoteJid: string, timestamp?: number): Promise<number> {
