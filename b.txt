@@ -1,0 +1,264 @@
+body 1: {
+
+  account: { id: 1, name: 'Matias' },
+
+  additional_attributes: {},
+
+  content_attributes: {},
+
+  content_type: 'text',
+
+  content: null,
+
+  conversation: {
+
+    additional_attributes: {},
+
+    can_reply: true,
+
+    channel: 'Channel::Api',
+
+    contact_inbox: {
+
+      id: 24,
+
+      contact_id: 13,
+
+      inbox_id: 2,
+
+      source_id: 'c6afb823-224b-4774-8fa4-b931d0d68d5d',
+
+      created_at: '2025-01-13T14:21:43.393Z',
+
+      updated_at: '2025-01-13T14:21:43.393Z',
+
+      hmac_verified: false,
+
+      pubsub_token: 'p5DxYbiv3midjTqnYmdaQgQQ',
+      },
+
+    id: 11,
+
+    inbox_id: 2,
+
+    messages: [ [Object] ],
+
+    labels: [],
+
+    meta: {
+
+      sender: [Object],
+
+      assignee: null,
+
+      team: null,
+
+      hmac_verified: false
+
+    },
+
+    status: 'open',
+
+    custom_attributes: {},
+
+    snoozed_until: null,
+
+    unread_count: 0,
+
+    first_reply_created_at: '2025-01-13T14:21:43.530Z',
+
+    priority: null,
+
+    waiting_since: 0,
+
+    agent_last_seen_at: 1736819104,
+      contact_last_seen_at: 0,
+
+    last_activity_at: 1736819104,
+
+    timestamp: 1736819104,
+
+    created_at: 1736778103
+
+  },
+
+  created_at: '2025-01-14T01:45:04.377Z',
+
+  id: 818,
+
+  inbox: { id: 2, name: 'WhatsApp-4800' },
+
+  message_type: 'outgoing',
+
+  status: 'sent',
+
+  private: false,
+
+  sender: { id: 1, name: 'Matias', email: 'matipvp02@gmail.com', type: 'user' },
+
+  source_id: null,
+
+  attachments: [
+
+    {
+
+      id: 139,
+
+      message_id: 818,
+         file_type: 'audio',
+
+      account_id: 1,
+
+      extension: null,
+
+      data_url: 'https://web-sandbox-2.up.railway.app/rails/active_storage/blobs/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBBYVU9IiwiZXhwIjpudWxsLCJwdXIiOiJibG9iX2lkIn19--bb9846e98393d815c135d296d9d1e5751d44f09b/1736819101888.oga';,
+
+      thumb_url: '',
+
+      file_size: 14790,
+
+      width: null,
+
+      height: null
+
+    }
+
+  ],
+
+  event: 'message_created'
+
+}
+
+
+
+BODY 2:
+{
+
+  account: { id: 1, name: 'Matias' },
+
+  additional_attributes: {},
+
+  content_attributes: {},
+
+  content_type: 'text',
+
+  content: null,
+
+  conversation: {
+
+    additional_attributes: {},
+
+    can_reply: true,
+
+    channel: 'Channel::Api',
+
+    contact_inbox: {
+
+      id: 24,
+
+      contact_id: 13,
+
+      inbox_id: 2,
+
+      source_id: 'c6afb823-224b-4774-8fa4-b931d0d68d5d',
+
+      created_at: '2025-01-13T14:21:43.393Z',
+
+      updated_at: '2025-01-13T14:21:43.393Z',
+
+      hmac_verified: false,
+
+      pubsub_token: 'p5DxYbiv3midjTqnYmdaQgQQ'
+
+    },
+
+    id: 11,
+
+    inbox_id: 2,
+     messages: [ [Object] ],
+
+    labels: [],
+
+    meta: {
+
+      sender: [Object],
+
+      assignee: null,
+
+      team: null,
+
+      hmac_verified: false
+
+    },
+
+    status: 'open',
+
+    custom_attributes: {},
+
+    snoozed_until: null,
+
+    unread_count: 0,
+
+    first_reply_created_at: '2025-01-13T14:21:43.530Z',
+
+    priority: null,
+
+    waiting_since: 0,
+
+    agent_last_seen_at: 1736819104,
+
+    contact_last_seen_at: 0,
+
+    last_activity_at: 1736819108,
+
+    timestamp: 1736819108,
+     created_at: 1736778103
+
+  },
+
+  created_at: '2025-01-14T01:45:08.385Z',
+
+  id: 819,
+
+  inbox: { id: 2, name: 'WhatsApp-4800' },
+
+  message_type: 'outgoing',
+
+  status: 'sent',
+
+  private: false,
+
+  sender: { id: 1, name: 'Matias', email: 'matipvp02@gmail.com', type: 'user' },
+
+  source_id: 'WAID:3EB0BE4569F41EB45909A7B1C1F0ACE62B1C72E6',
+
+  attachments: [
+
+    {
+
+      id: 140,
+
+      message_id: 819,
+
+      file_type: 'audio',
+
+      account_id: 1,
+
+      extension: null,
+
+      data_url: 'https://web-sandbox-2.up.railway.app/rails/active_storage/blobs/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBBYVk9IiwiZXhwIjpudWxsLCJwdXIiOiJibG9iX2lkIn19--02c7292c5e051b0d5150b5df8b6ca8acd651c5bc/0u1n1o.oga';,
+
+      thumb_url: '',
+
+      file_size: 16628,
+
+      width: null,
+
+      height: null
+
+    }
+    ],
+
+  event: 'message_created'
+
+}
