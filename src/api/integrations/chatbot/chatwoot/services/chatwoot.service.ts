@@ -1520,9 +1520,9 @@ export class ChatwootService {
       },
     });
 
-    if (this.isImportHistoryAvailable()) {
-      chatwootImport.updateMessageSourceID(chatwootMessageIds.messageId, key.id);
-    }
+    // if (this.isImportHistoryAvailable()) {
+    //   chatwootImport.updateMessageSourceID(chatwootMessageIds.messageId, key.id);
+    // }
   }
 
   private async getMessageByKeyId(instance: InstanceDto, keyId: string): Promise<MessageModel> {
