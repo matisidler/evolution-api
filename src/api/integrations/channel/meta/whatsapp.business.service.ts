@@ -447,29 +447,29 @@ export class BusinessStartupService extends ChannelStartupService {
           // await this.client.readMessages([received.key]);
         }
 
-        if (this.configService.get<Openai>('OPENAI').ENABLED) {
-          const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-            where: {
-              instanceId: this.instanceId,
-            },
-            include: {
-              OpenaiCreds: true,
-            },
-          });
+        // if (this.configService.get<Openai>('OPENAI').ENABLED) {
+        //   const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+        //     where: {
+        //       instanceId: this.instanceId,
+        //     },
+        //     include: {
+        //       OpenaiCreds: true,
+        //     },
+        //   });
 
-          if (
-            openAiDefaultSettings &&
-            openAiDefaultSettings.openaiCredsId &&
-            openAiDefaultSettings.speechToText &&
-            received?.message?.audioMessage
-          ) {
-            messageRaw.message.speechToText = await this.openaiService.speechToText(
-              openAiDefaultSettings.OpenaiCreds,
-              received,
-              this.client.updateMediaMessage,
-            );
-          }
-        }
+        //   if (
+        //     openAiDefaultSettings &&
+        //     openAiDefaultSettings.openaiCredsId &&
+        //     openAiDefaultSettings.speechToText &&
+        //     received?.message?.audioMessage
+        //   ) {
+        //     messageRaw.message.speechToText = await this.openaiService.speechToText(
+        //       openAiDefaultSettings.OpenaiCreds,
+        //       received,
+        //       this.client.updateMediaMessage,
+        //     );
+        //   }
+        // }
 
         this.logger.log(messageRaw);
 
