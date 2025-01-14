@@ -1096,23 +1096,25 @@ export class ChatwootService {
           break;
       }
 
+      // Handle audio messages differently to prevent duplication
       if (type === 'audio') {
-        const data: SendAudioDto = {
+        const data: SendMediaDto = {
           number: number,
-          audio: media,
+          mediatype: type,
+          fileName: fileName,
+          media: media,
           delay: 1200,
           quoted: options?.quoted,
         };
 
-        sendTelemetry('/message/sendWhatsAppAudio');
+        sendTelemetry('/message/sendMedia');
 
-        const messageSent = await waInstance?.audioWhatsapp(data, true);
+        if (caption) {
+          data.caption = caption;
+        }
 
+        const messageSent = await waInstance?.mediaMessage(data, null, true);
         return messageSent;
-      }
-
-      if (type === 'image' && parsedMedia && parsedMedia?.ext === '.gif') {
-        type = 'document';
       }
 
       const data: SendMediaDto = {
