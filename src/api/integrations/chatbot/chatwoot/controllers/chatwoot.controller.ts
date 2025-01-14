@@ -1,14 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InstanceDto } from '@/core/dto/instance.dto';
-import { ChatwootDto } from '../dto/chatwoot.dto';
-import { ChatwootService } from '../services/chatwoot.service';
-import { Chatwoot, HttpServer } from '@/config/env.config';
+import { InstanceDto } from '@api/dto/instance.dto';
+import { ChatwootDto } from '@api/integrations/chatbot/chatwoot/dto/chatwoot.dto';
+import { ChatwootService } from '@api/integrations/chatbot/chatwoot/services/chatwoot.service';
+import { PrismaRepository } from '@api/repository/repository.service';
+import { waMonitor } from '@api/server.module';
+import { CacheService } from '@api/services/cache.service';
+import { CacheEngine } from '@cache/cacheengine';
+import { Chatwoot, ConfigService, HttpServer } from '@config/env.config';
+import { BadRequestException } from '@exceptions';
 import { isURL } from 'class-validator';
-import { waMonitor } from '@/whatsapp/whatsapp.module';
-import { CacheService } from '@/cache/cache.service';
-import { CacheEngine } from '@/cache/engine/cache.engine';
-import { PrismaRepository } from '@/repository/prisma.repository';
 
 export class ChatwootController {
   constructor(
