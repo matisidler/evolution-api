@@ -2939,7 +2939,7 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
-    this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. isIntegration: ${isIntegration}`);
+    this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. isIntegration: ${isIntegration}, data: ${JSON.stringify(data)}, file: ${JSON.stringify(file)}`);
     const mediaData: SendAudioDto = { ...data };
 
     if (file?.buffer) {
