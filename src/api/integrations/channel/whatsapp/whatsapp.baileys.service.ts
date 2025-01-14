@@ -1204,24 +1204,24 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (this.configService.get<Openai>('OPENAI').ENABLED && received?.message?.audioMessage) {
-            const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-              where: {
-                instanceId: this.instanceId,
-              },
-              include: {
-                OpenaiCreds: true,
-              },
-            });
+          // if (this.configService.get<Openai>('OPENAI').ENABLED && received?.message?.audioMessage) {
+          //   const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+          //     where: {
+          //       instanceId: this.instanceId,
+          //     },
+          //     include: {
+          //       OpenaiCreds: true,
+          //     },
+          //   });
 
-            if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-              messageRaw.message.speechToText = await this.openaiService.speechToText(
-                openAiDefaultSettings.OpenaiCreds,
-                received,
-                this.client.updateMediaMessage,
-              );
-            }
-          }
+          //   if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+          //     messageRaw.message.speechToText = await this.openaiService.speechToText(
+          //       openAiDefaultSettings.OpenaiCreds,
+          //       received,
+          //       this.client.updateMediaMessage,
+          //     );
+          //   }
+          // }
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
             const msg = await this.prismaRepository.message.create({
@@ -2211,24 +2211,24 @@ export class BaileysStartupService extends ChannelStartupService {
               }
             }
 
-            if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
-              const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-                where: {
-                  instanceId: this.instanceId,
-                },
-                include: {
-                  OpenaiCreds: true,
-                },
-              });
+            // if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
+            //   const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+            //     where: {
+            //       instanceId: this.instanceId,
+            //     },
+            //     include: {
+            //       OpenaiCreds: true,
+            //     },
+            //   });
 
-              if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-                messageRaw.message.speechToText = await this.openaiService.speechToText(
-                  openAiDefaultSettings.OpenaiCreds,
-                  messageRaw,
-                  this.client.updateMediaMessage,
-                );
-              }
-            }
+            //   if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+            //     messageRaw.message.speechToText = await this.openaiService.speechToText(
+            //       openAiDefaultSettings.OpenaiCreds,
+            //       messageRaw,
+            //       this.client.updateMediaMessage,
+            //     );
+            //   }
+            // }
 
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
               const msg = await this.prismaRepository.message.create({
