@@ -1188,8 +1188,9 @@ export class ChatwootService {
   public async receiveWebhook(body: any, instance: InstanceDto) {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
-
+      console.log("Getting clientCw, instance: ", instance)
       const client = await this.clientCw(instance);
+      console.log("Client found: ", client)
 
       this.logger.verbose('receiveWebhook - Started');
       console.log('Body:', body);
