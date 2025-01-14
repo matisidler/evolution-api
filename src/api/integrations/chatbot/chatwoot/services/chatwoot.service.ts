@@ -1186,7 +1186,7 @@ export class ChatwootService {
       if (senderPhone) {
         // const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
         console.log("DEBUG: SENDER PHONE: ", senderPhone)
-        const key = `audio_tracking:${senderPhone}`;
+        const key = `audio_tracking:${senderPhone.replaceAll('+', '')}`;
         const audioUrls = await this.cache.get(key);
         console.log("DEBUG: Filtering by key: ", key, "with value: ", audioUrls)
         console.log("DEBUG: DATA URL: ", body.conversation?.messages?.[0]?.attachments?.[0]?.data_url)
