@@ -2943,6 +2943,19 @@ export class BaileysStartupService extends ChannelStartupService {
     }
   }
 
+  private async trackAudioSending(number: string, audioUrl: string): Promise<boolean> {
+    const key = `audio_tracking:${number}`;
+    const audioId = this.generateRandomId();
+    
+    try {
+      await this.cache.hSet(key, audioId, audioUrl);
+      await this.cache.set(key, '', 10); // Just to set TTL on the hash
+      return true;
+    } catch (error) {
+      this.logger.error(`Error tracking audio: ${error}`);
+      return false;
+    }
+  }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
     let lastError: any;
@@ -2950,6 +2963,14 @@ export class BaileysStartupService extends ChannelStartupService {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. Attempt ${attempt}/${this.maxRetries}. isIntegration: ${isIntegration}, data: ${JSON.stringify(data)}, file: ${JSON.stringify(file)}`);
+        
+        // Track the audio sending
+        if (data.number && data.audio) {
+          // Extract just the number without + and @whatsapp.net
+          const cleanNumber = data.number.replace(/[+@].*$/, '').replace(/\D/g, '');
+          await this.trackAudioSending(cleanNumber, data.audio);
+        }
+        
         const mediaData: SendAudioDto = { ...data };
 
         if (file?.buffer) {

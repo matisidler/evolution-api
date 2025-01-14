@@ -1179,326 +1179,348 @@ export class ChatwootService {
       await new Promise((resolve) => setTimeout(resolve, 500));
       console.log("Full body: ", body)
       console.log("Full instance: ", instance)
+
+      // Check if we're processing an audio for this number
+      const senderPhone = body.conversation?.meta?.sender?.phone_number;
+      if (senderPhone) {
+        const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
+        const key = `audio_tracking:${cleanNumber}`;
+        const audioUrls = await this.cache.get(key);
+        
+        // If we have tracked audios for this number
+        if (audioUrls) {
+          // If we have a data_url in the body
+          if (body.conversation?.messages?.[0]?.attachments?.[0]?.data_url) {
+            const currentAudioUrl = body.conversation.messages[0].attachments[0].data_url;
+            const isTrackedAudio = Object.values(audioUrls).includes(currentAudioUrl);
+            
+            if (isTrackedAudio) {
+              console.log("DEBUG: Found tracked audio, deleting from Redis and continuing");
+              // Find and delete this specific audio from Redis
+              const audioId = Object.keys(audioUrls).find(key => audioUrls[key] === currentAudioUrl);
+              if (audioId) {
+                await this.cache.hDelete(key, audioId);
+                console.log("DEBUG: Deleted audio from Redis");
+              }
+            } else {
+              console.log("DEBUG: Found untracked audio while tracking others, skipping webhook");
+              return null;
+            }
+          }
+        }
+      }
+
       try {
         console.log("DEBUG: Processing message with ID: ", body.id)
-        console.log("DEBUG: Attachments from body: ", body.conversation.messages[0].attachments)
-        console.log("DEBUG Meta sender: ", body.conversation.meta.sender)
-        console.log("DEBUG Messages: ", body.conversation.messages)
-        if (body.source_id ){
-          console.log("DEBUG: source_id found, returning. ID: ", body.id)
-          return null
-        } else {
-          console.log("DEBUG: source_id found, continuing. ID: ", body.id)
+        const client = await this.clientCw(instance);
+
+        if (!client) {
+          this.logger.warn('client not found');
+          return null;
         }
-      } catch (error) {
-        console.log("DEBUG: Error getting body: ", error)
-      }
-      const client = await this.clientCw(instance);
 
-      if (!client) {
-        this.logger.warn('client not found');
-        return null;
-      }
+        if (
+          this.provider.reopenConversation === false &&
+          body.event === 'conversation_status_changed' &&
+          body.status === 'resolved' &&
+          body.meta?.sender?.identifier
+        ) {
+          const keyToDelete = `${instance.instanceName}:createConversation-${body.meta.sender.identifier}`;
+          this.cache.delete(keyToDelete);
+        }
 
-      if (
-        this.provider.reopenConversation === false &&
-        body.event === 'conversation_status_changed' &&
-        body.status === 'resolved' &&
-        body.meta?.sender?.identifier
-      ) {
-        const keyToDelete = `${instance.instanceName}:createConversation-${body.meta.sender.identifier}`;
-        this.cache.delete(keyToDelete);
-      }
+        if (
+          !body?.conversation ||
+          body.private ||
+          (body.event === 'message_updated' && !body.content_attributes?.deleted)
+        ) {
+          return { message: 'bot' };
+        }
 
-      if (
-        !body?.conversation ||
-        body.private ||
-        (body.event === 'message_updated' && !body.content_attributes?.deleted)
-      ) {
-        return { message: 'bot' };
-      }
+        const chatId =
+          body.conversation.meta.sender?.identifier || body.conversation.meta.sender?.phone_number.replace('+', '');
+        // Chatwoot to Whatsapp
+        const messageReceived = body.content
+          ? body.content
+              .replaceAll(/(?<!\*)\*((?!\s)([^\n*]+?)(?<!\s))\*(?!\*)/g, '_$1_') // Substitui * por _
+              .replaceAll(/\*{2}((?!\s)([^\n*]+?)(?<!\s))\*{2}/g, '*$1*') // Substitui ** por *
+              .replaceAll(/~{2}((?!\s)([^\n*]+?)(?<!\s))~{2}/g, '~$1~') // Substitui ~~ por ~
+              .replaceAll(/(?<!`)`((?!\s)([^`*]+?)(?<!\s))`(?!`)/g, '```$1```') // Substitui ` por ```
+          : body.content;
 
-      const chatId =
-        body.conversation.meta.sender?.identifier || body.conversation.meta.sender?.phone_number.replace('+', '');
-      // Chatwoot to Whatsapp
-      const messageReceived = body.content
-        ? body.content
-            .replaceAll(/(?<!\*)\*((?!\s)([^\n*]+?)(?<!\s))\*(?!\*)/g, '_$1_') // Substitui * por _
-            .replaceAll(/\*{2}((?!\s)([^\n*]+?)(?<!\s))\*{2}/g, '*$1*') // Substitui ** por *
-            .replaceAll(/~{2}((?!\s)([^\n*]+?)(?<!\s))~{2}/g, '~$1~') // Substitui ~~ por ~
-            .replaceAll(/(?<!`)`((?!\s)([^`*]+?)(?<!\s))`(?!`)/g, '```$1```') // Substitui ` por ```
-        : body.content;
+        const senderName = body?.conversation?.messages[0]?.sender?.available_name || body?.sender?.name;
+        const waInstance = this.waMonitor.waInstances[instance.instanceName];
 
-      const senderName = body?.conversation?.messages[0]?.sender?.available_name || body?.sender?.name;
-      const waInstance = this.waMonitor.waInstances[instance.instanceName];
-
-      if (body.event === 'message_updated' && body.content_attributes?.deleted) {
-        const message = await this.prismaRepository.message.findFirst({
-          where: {
-            chatwootMessageId: body.id,
-            instanceId: instance.instanceId,
-          },
-        });
-
-        if (message) {
-          const key = message.key as {
-            id: string;
-            remoteJid: string;
-            fromMe: boolean;
-            participant: string;
-          };
-
-          await waInstance?.client.sendMessage(key.remoteJid, { delete: key });
-
-          await this.prismaRepository.message.deleteMany({
+        if (body.event === 'message_updated' && body.content_attributes?.deleted) {
+          const message = await this.prismaRepository.message.findFirst({
             where: {
-              instanceId: instance.instanceId,
               chatwootMessageId: body.id,
+              instanceId: instance.instanceId,
             },
           });
+
+          if (message) {
+            const key = message.key as {
+              id: string;
+              remoteJid: string;
+              fromMe: boolean;
+              participant: string;
+            };
+
+            await waInstance?.client.sendMessage(key.remoteJid, { delete: key });
+
+            await this.prismaRepository.message.deleteMany({
+              where: {
+                instanceId: instance.instanceId,
+                chatwootMessageId: body.id,
+              },
+            });
+          }
+          return { message: 'bot' };
         }
-        return { message: 'bot' };
-      }
 
-      const cwBotContact = this.configService.get<Chatwoot>('CHATWOOT').BOT_CONTACT;
+        const cwBotContact = this.configService.get<Chatwoot>('CHATWOOT').BOT_CONTACT;
 
-      if (chatId === '123456' && body.message_type === 'outgoing') {
-        const command = messageReceived.replace('/', '');
+        if (chatId === '123456' && body.message_type === 'outgoing') {
+          const command = messageReceived.replace('/', '');
 
-        if (cwBotContact && (command.includes('init') || command.includes('iniciar'))) {
-          const state = waInstance?.connectionStatus?.state;
+          if (cwBotContact && (command.includes('init') || command.includes('iniciar'))) {
+            const state = waInstance?.connectionStatus?.state;
 
-          if (state !== 'open') {
-            const number = command.split(':')[1];
-            await waInstance.connectToWhatsapp(number);
-          } else {
+            if (state !== 'open') {
+              const number = command.split(':')[1];
+              await waInstance.connectToWhatsapp(number);
+            } else {
+              await this.createBotMessage(
+                instance,
+                i18next.t('cw.inbox.alreadyConnected', {
+                  inboxName: body.inbox.name,
+                }),
+                'incoming',
+              );
+            }
+          }
+
+          if (command === 'clearcache') {
+            waInstance.clearCacheChatwoot();
             await this.createBotMessage(
               instance,
-              i18next.t('cw.inbox.alreadyConnected', {
+              i18next.t('cw.inbox.clearCache', {
                 inboxName: body.inbox.name,
               }),
               'incoming',
             );
           }
-        }
 
-        if (command === 'clearcache') {
-          waInstance.clearCacheChatwoot();
-          await this.createBotMessage(
-            instance,
-            i18next.t('cw.inbox.clearCache', {
+          if (command === 'status') {
+            const state = waInstance?.connectionStatus?.state;
+
+            if (!state) {
+              await this.createBotMessage(
+                instance,
+                i18next.t('cw.inbox.notFound', {
+                  inboxName: body.inbox.name,
+                }),
+                'incoming',
+              );
+            }
+
+            if (state) {
+              await this.createBotMessage(
+                instance,
+                i18next.t('cw.inbox.status', {
+                  inboxName: body.inbox.name,
+                  state: state,
+                }),
+                'incoming',
+              );
+            }
+          }
+
+          if (cwBotContact && (command === 'disconnect' || command === 'desconectar')) {
+            const msgLogout = i18next.t('cw.inbox.disconnect', {
               inboxName: body.inbox.name,
-            }),
-            'incoming',
-          );
-        }
+            });
 
-        if (command === 'status') {
-          const state = waInstance?.connectionStatus?.state;
+            await this.createBotMessage(instance, msgLogout, 'incoming');
 
-          if (!state) {
-            await this.createBotMessage(
-              instance,
-              i18next.t('cw.inbox.notFound', {
-                inboxName: body.inbox.name,
-              }),
-              'incoming',
-            );
-          }
-
-          if (state) {
-            await this.createBotMessage(
-              instance,
-              i18next.t('cw.inbox.status', {
-                inboxName: body.inbox.name,
-                state: state,
-              }),
-              'incoming',
-            );
+            await waInstance?.client?.logout('Log out instance: ' + instance.instanceName);
+            await waInstance?.client?.ws?.close();
           }
         }
 
-        if (cwBotContact && (command === 'disconnect' || command === 'desconectar')) {
-          const msgLogout = i18next.t('cw.inbox.disconnect', {
-            inboxName: body.inbox.name,
-          });
+        if (body.message_type === 'outgoing' && body?.conversation?.messages?.length && chatId !== '123456') {
+          if (body?.conversation?.messages[0]?.source_id?.substring(0, 5) === 'WAID:') {
+            return { message: 'bot' };
+          }
 
-          await this.createBotMessage(instance, msgLogout, 'incoming');
+          if (!waInstance && body.conversation?.id) {
+            this.onSendMessageError(instance, body.conversation?.id, 'Instance not found');
+            return { message: 'bot' };
+          }
 
-          await waInstance?.client?.logout('Log out instance: ' + instance.instanceName);
-          await waInstance?.client?.ws?.close();
-        }
-      }
+          let formatText: string;
+          if (senderName === null || senderName === undefined) {
+            formatText = messageReceived;
+          } else {
+            const formattedDelimiter = this.provider.signDelimiter
+              ? this.provider.signDelimiter.replaceAll('\\n', '\n')
+              : '\n';
+            const textToConcat = this.provider.signMsg ? [`*${senderName}:*`] : [];
+            textToConcat.push(messageReceived);
 
-      if (body.message_type === 'outgoing' && body?.conversation?.messages?.length && chatId !== '123456') {
-        if (body?.conversation?.messages[0]?.source_id?.substring(0, 5) === 'WAID:') {
-          return { message: 'bot' };
-        }
+            formatText = textToConcat.join(formattedDelimiter);
+          }
 
-        if (!waInstance && body.conversation?.id) {
-          this.onSendMessageError(instance, body.conversation?.id, 'Instance not found');
-          return { message: 'bot' };
-        }
+          for (const message of body.conversation.messages) {
+            if (message.attachments && message.attachments.length > 0) {
+              for (const attachment of message.attachments) {
+                if (!messageReceived) {
+                  formatText = null;
+                }
 
-        let formatText: string;
-        if (senderName === null || senderName === undefined) {
-          formatText = messageReceived;
-        } else {
-          const formattedDelimiter = this.provider.signDelimiter
-            ? this.provider.signDelimiter.replaceAll('\\n', '\n')
-            : '\n';
-          const textToConcat = this.provider.signMsg ? [`*${senderName}:*`] : [];
-          textToConcat.push(messageReceived);
+                const options: Options = {
+                  quoted: await this.getQuotedMessage(body, instance),
+                };
 
-          formatText = textToConcat.join(formattedDelimiter);
-        }
+                const messageSent = await this.sendAttachment(
+                  waInstance,
+                  chatId,
+                  attachment.data_url,
+                  formatText,
+                  options,
+                );
+                if (!messageSent && body.conversation?.id) {
+                  this.onSendMessageError(instance, body.conversation?.id);
+                }
 
-        for (const message of body.conversation.messages) {
-          if (message.attachments && message.attachments.length > 0) {
-            for (const attachment of message.attachments) {
-              if (!messageReceived) {
-                formatText = null;
+                await this.updateChatwootMessageId(
+                  {
+                    ...messageSent,
+                    owner: instance.instanceName,
+                  },
+                  {
+                    messageId: body.id,
+                    inboxId: body.inbox?.id,
+                    conversationId: body.conversation?.id,
+                    contactInboxSourceId: body.conversation?.contact_inbox?.source_id,
+                  },
+                  instance,
+                );
               }
-
-              const options: Options = {
+            } else {
+              const data: SendTextDto = {
+                number: chatId,
+                text: formatText,
+                delay: 1200,
                 quoted: await this.getQuotedMessage(body, instance),
               };
 
-              const messageSent = await this.sendAttachment(
-                waInstance,
-                chatId,
-                attachment.data_url,
-                formatText,
-                options,
-              );
-              if (!messageSent && body.conversation?.id) {
-                this.onSendMessageError(instance, body.conversation?.id);
+              sendTelemetry('/message/sendText');
+
+              let messageSent: any;
+              try {
+                messageSent = await waInstance?.textMessage(data, true);
+                if (!messageSent) {
+                  throw new Error('Message not sent');
+                }
+
+                if (Long.isLong(messageSent?.messageTimestamp)) {
+                  messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
+                }
+
+                await this.updateChatwootMessageId(
+                  {
+                    ...messageSent,
+                    instanceId: instance.instanceId,
+                  },
+                  {
+                    messageId: body.id,
+                    inboxId: body.inbox?.id,
+                    conversationId: body.conversation?.id,
+                    contactInboxSourceId: body.conversation?.contact_inbox?.source_id,
+                  },
+                  instance,
+                );
+              } catch (error) {
+                if (!messageSent && body.conversation?.id) {
+                  this.onSendMessageError(instance, body.conversation?.id, error);
+                }
+                throw error;
               }
-
-              await this.updateChatwootMessageId(
-                {
-                  ...messageSent,
-                  owner: instance.instanceName,
-                },
-                {
-                  messageId: body.id,
-                  inboxId: body.inbox?.id,
-                  conversationId: body.conversation?.id,
-                  contactInboxSourceId: body.conversation?.contact_inbox?.source_id,
-                },
-                instance,
-              );
-            }
-          } else {
-            const data: SendTextDto = {
-              number: chatId,
-              text: formatText,
-              delay: 1200,
-              quoted: await this.getQuotedMessage(body, instance),
-            };
-
-            sendTelemetry('/message/sendText');
-
-            let messageSent: any;
-            try {
-              messageSent = await waInstance?.textMessage(data, true);
-              if (!messageSent) {
-                throw new Error('Message not sent');
-              }
-
-              if (Long.isLong(messageSent?.messageTimestamp)) {
-                messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
-              }
-
-              await this.updateChatwootMessageId(
-                {
-                  ...messageSent,
-                  instanceId: instance.instanceId,
-                },
-                {
-                  messageId: body.id,
-                  inboxId: body.inbox?.id,
-                  conversationId: body.conversation?.id,
-                  contactInboxSourceId: body.conversation?.contact_inbox?.source_id,
-                },
-                instance,
-              );
-            } catch (error) {
-              if (!messageSent && body.conversation?.id) {
-                this.onSendMessageError(instance, body.conversation?.id, error);
-              }
-              throw error;
             }
           }
-        }
 
-        const chatwootRead = this.configService.get<Chatwoot>('CHATWOOT').MESSAGE_READ;
-        if (chatwootRead) {
-          const lastMessage = await this.prismaRepository.message.findFirst({
-            where: {
-              key: {
-                path: ['fromMe'],
-                equals: false,
-              },
-              instanceId: instance.instanceId,
-            },
-          });
-          if (lastMessage && !lastMessage.chatwootIsRead) {
-            const key = lastMessage.key as {
-              id: string;
-              fromMe: boolean;
-              remoteJid: string;
-              participant?: string;
-            };
-
-            waInstance?.markMessageAsRead({
-              readMessages: [
-                {
-                  id: key.id,
-                  fromMe: key.fromMe,
-                  remoteJid: key.remoteJid,
-                },
-              ],
-            });
-            const updateMessage = {
-              chatwootMessageId: lastMessage.chatwootMessageId,
-              chatwootConversationId: lastMessage.chatwootConversationId,
-              chatwootInboxId: lastMessage.chatwootInboxId,
-              chatwootContactInboxSourceId: lastMessage.chatwootContactInboxSourceId,
-              chatwootIsRead: true,
-            };
-
-            await this.prismaRepository.message.updateMany({
+          const chatwootRead = this.configService.get<Chatwoot>('CHATWOOT').MESSAGE_READ;
+          if (chatwootRead) {
+            const lastMessage = await this.prismaRepository.message.findFirst({
               where: {
-                instanceId: instance.instanceId,
                 key: {
-                  path: ['id'],
-                  equals: key.id,
+                  path: ['fromMe'],
+                  equals: false,
                 },
+                instanceId: instance.instanceId,
               },
-              data: updateMessage,
             });
+            if (lastMessage && !lastMessage.chatwootIsRead) {
+              const key = lastMessage.key as {
+                id: string;
+                fromMe: boolean;
+                remoteJid: string;
+                participant?: string;
+              };
+
+              waInstance?.markMessageAsRead({
+                readMessages: [
+                  {
+                    id: key.id,
+                    fromMe: key.fromMe,
+                    remoteJid: key.remoteJid,
+                  },
+                ],
+              });
+              const updateMessage = {
+                chatwootMessageId: lastMessage.chatwootMessageId,
+                chatwootConversationId: lastMessage.chatwootConversationId,
+                chatwootInboxId: lastMessage.chatwootInboxId,
+                chatwootContactInboxSourceId: lastMessage.chatwootContactInboxSourceId,
+                chatwootIsRead: true,
+              };
+
+              await this.prismaRepository.message.updateMany({
+                where: {
+                  instanceId: instance.instanceId,
+                  key: {
+                    path: ['id'],
+                    equals: key.id,
+                  },
+                },
+                data: updateMessage,
+              });
+            }
           }
         }
+
+        if (body.message_type === 'template' && body.event === 'message_created') {
+          const data: SendTextDto = {
+            number: chatId,
+            text: body.content.replace(/\\\r\n|\\\n|\n/g, '\n'),
+            delay: 1200,
+          };
+
+          sendTelemetry('/message/sendText');
+
+          await waInstance?.textMessage(data);
+        }
+
+        return { message: 'bot' };
+      } catch (error) {
+        this.logger.error(error);
+
+        return { message: 'bot' };
       }
-
-      if (body.message_type === 'template' && body.event === 'message_created') {
-        const data: SendTextDto = {
-          number: chatId,
-          text: body.content.replace(/\\\r\n|\\\n|\n/g, '\n'),
-          delay: 1200,
-        };
-
-        sendTelemetry('/message/sendText');
-
-        await waInstance?.textMessage(data);
-      }
-
-      return { message: 'bot' };
     } catch (error) {
       this.logger.error(error);
-
-      return { message: 'bot' };
     }
   }
 
