@@ -1184,7 +1184,7 @@ export class ChatwootService {
         console.log("DEBUG: Attachments from body: ", body.conversation.messages[0].attachments)
         console.log("DEBUG Meta sender: ", body.conversation.meta.sender)
         console.log("DEBUG Messages: ", body.conversation.messages)
-        if (!body.source_id ){
+        if (body.source_id ){
           console.log("DEBUG: source_id found, returning. ID: ", body.id)
           return null
         } else {
