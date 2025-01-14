@@ -2946,7 +2946,7 @@ export class BaileysStartupService extends ChannelStartupService {
   private async trackAudioSending(number: string, audioUrl: string): Promise<boolean> {
     const key = `audio_tracking:${number}`;
     const audioId = this.generateRandomId();
-    
+    console.log("DEBUG: Tracking audio with key: ", key, "and audioId: ", audioId, "and audioUrl: ", audioUrl)
     try {
       await this.cache.hSet(key, audioId, audioUrl);
       await this.cache.set(key, '', 10); // Just to set TTL on the hash

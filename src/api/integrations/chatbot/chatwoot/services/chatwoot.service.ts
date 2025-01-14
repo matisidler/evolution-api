@@ -1186,6 +1186,8 @@ export class ChatwootService {
         const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
         const key = `audio_tracking:${cleanNumber}`;
         const audioUrls = await this.cache.get(key);
+        console.log("DEBUG: Filtering by key: ", key, "with value: ", audioUrls)
+        console.log("DEBUG: DATA URL: ", body.conversation?.messages?.[0]?.attachments?.[0]?.data_url)
         
         // If we have tracked audios for this number
         if (audioUrls) {
@@ -1194,17 +1196,11 @@ export class ChatwootService {
             const currentAudioUrl = body.conversation.messages[0].attachments[0].data_url;
             const isTrackedAudio = Object.values(audioUrls).includes(currentAudioUrl);
             
-            if (isTrackedAudio) {
-              console.log("DEBUG: Found tracked audio, deleting from Redis and continuing");
-              // Find and delete this specific audio from Redis
-              const audioId = Object.keys(audioUrls).find(key => audioUrls[key] === currentAudioUrl);
-              if (audioId) {
-                await this.cache.hDelete(key, audioId);
-                console.log("DEBUG: Deleted audio from Redis");
-              }
-            } else {
+            if (!isTrackedAudio) {
               console.log("DEBUG: Found untracked audio while tracking others, skipping webhook");
               return null;
+            }else {
+              console.log("DEBUG: Found tracked audio, continuing");
             }
           }
         }
