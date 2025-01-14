@@ -1189,6 +1189,8 @@ export class ChatwootService {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
+      const client = await this.clientCw(instance);
+
       this.logger.verbose('receiveWebhook - Started');
       console.log('Body:', body);
       console.log('Instance:', instance);
@@ -1205,7 +1207,6 @@ export class ChatwootService {
 
       try {
         console.log("DEBUG: Processing message with ID: ", body.id)
-        const client = await this.clientCw(instance);
 
         if (!client) {
           this.logger.warn('client not found');
