@@ -1179,6 +1179,7 @@ export class ChatwootService {
       await new Promise((resolve) => setTimeout(resolve, 500));
       console.log("Full body: ", body)
       console.log("Full instance: ", instance)
+      console.log("DEBUG: Messages: ", body.conversation?.messages)
 
       // Check if we're processing an audio for this number
       const senderPhone = body.conversation?.meta?.sender?.phone_number;
