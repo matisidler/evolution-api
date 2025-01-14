@@ -1174,38 +1174,33 @@ export class ChatwootService {
     });
   }
 
-  public async receiveWebhook(instance: InstanceDto, body: any) {
+  private generateRandomId(length = 11) {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+  }
+
+
+
+  public async receiveWebhook(body: any, instance: InstanceDto) {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log("Full body: ", body)
-      console.log("Full instance: ", instance)
-      console.log("DEBUG: Messages: ", body.conversation?.messages)
 
-      // Check if we're processing an audio for this number
-      const senderPhone = body.conversation?.meta?.sender?.phone_number;
-      if (senderPhone) {
-        // const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
-        console.log("DEBUG: SENDER PHONE: ", senderPhone)
-        const key = `audio_tracking:${senderPhone.replaceAll('+', '')}`;
-        const audioUrls = await this.cache.get(key);
-        console.log("DEBUG: Filtering by key: ", key, "with value: ", audioUrls)
-        console.log("DEBUG: DATA URL: ", body.conversation?.messages?.[0]?.attachments?.[0]?.data_url)
-        
-        // If we have tracked audios for this number
-        if (audioUrls) {
-          // If we have a data_url in the body
-          if (body.conversation?.messages?.[0]?.attachments?.[0]?.data_url) {
-            const currentAudioUrl = body.conversation.messages[0].attachments[0].data_url;
-            const isTrackedAudio = Object.values(audioUrls).includes(currentAudioUrl);
-            
-            if (!isTrackedAudio) {
-              console.log("DEBUG: Found untracked audio while tracking others, skipping webhook");
-              return null;
-            }else {
-              console.log("DEBUG: Found tracked audio, continuing");
-            }
-          }
-        }
+      this.logger.verbose('receiveWebhook - Started');
+      console.log('Body:', body);
+      console.log('Instance:', instance);
+
+      // Track audio messages in Redis
+      if (body?.conversation?.meta?.sender?.phone_number && body?.data_url) {
+        const cleanNumber = body.conversation.meta.sender.phone_number.replaceAll('+', '');
+        const key = `audio_tracking:${cleanNumber}`;
+        const audioId = this.generateRandomId();
+        const currentAudios = await this.cache.get(key) || {};
+        currentAudios[audioId] = body.data_url;
+        await this.cache.set(key, currentAudios, 10); // 10 second TTL
       }
 
       try {
@@ -1277,75 +1272,6 @@ export class ChatwootService {
           return { message: 'bot' };
         }
 
-        const cwBotContact = this.configService.get<Chatwoot>('CHATWOOT').BOT_CONTACT;
-
-        if (chatId === '123456' && body.message_type === 'outgoing') {
-          const command = messageReceived.replace('/', '');
-
-          if (cwBotContact && (command.includes('init') || command.includes('iniciar'))) {
-            const state = waInstance?.connectionStatus?.state;
-
-            if (state !== 'open') {
-              const number = command.split(':')[1];
-              await waInstance.connectToWhatsapp(number);
-            } else {
-              await this.createBotMessage(
-                instance,
-                i18next.t('cw.inbox.alreadyConnected', {
-                  inboxName: body.inbox.name,
-                }),
-                'incoming',
-              );
-            }
-          }
-
-          if (command === 'clearcache') {
-            waInstance.clearCacheChatwoot();
-            await this.createBotMessage(
-              instance,
-              i18next.t('cw.inbox.clearCache', {
-                inboxName: body.inbox.name,
-              }),
-              'incoming',
-            );
-          }
-
-          if (command === 'status') {
-            const state = waInstance?.connectionStatus?.state;
-
-            if (!state) {
-              await this.createBotMessage(
-                instance,
-                i18next.t('cw.inbox.notFound', {
-                  inboxName: body.inbox.name,
-                }),
-                'incoming',
-              );
-            }
-
-            if (state) {
-              await this.createBotMessage(
-                instance,
-                i18next.t('cw.inbox.status', {
-                  inboxName: body.inbox.name,
-                  state: state,
-                }),
-                'incoming',
-              );
-            }
-          }
-
-          if (cwBotContact && (command === 'disconnect' || command === 'desconectar')) {
-            const msgLogout = i18next.t('cw.inbox.disconnect', {
-              inboxName: body.inbox.name,
-            });
-
-            await this.createBotMessage(instance, msgLogout, 'incoming');
-
-            await waInstance?.client?.logout('Log out instance: ' + instance.instanceName);
-            await waInstance?.client?.ws?.close();
-          }
-        }
 
         if (body.message_type === 'outgoing' && body?.conversation?.messages?.length && chatId !== '123456') {
           if (body?.conversation?.messages[0]?.source_id?.substring(0, 5) === 'WAID:') {

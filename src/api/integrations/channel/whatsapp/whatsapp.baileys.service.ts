@@ -2964,11 +2964,20 @@ export class BaileysStartupService extends ChannelStartupService {
       try {
         this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. Attempt ${attempt}/${this.maxRetries}. isIntegration: ${isIntegration}, data: ${JSON.stringify(data)}, file: ${JSON.stringify(file)}`);
         
-        // Track the audio sending
+        // Check if this audio is being tracked
         if (data.number && data.audio) {
-          // Extract just the number without + and @whatsapp.net
           const cleanNumber = data.number.replace(/[+@].*$/, '').replace(/\D/g, '');
-          await this.trackAudioSending(cleanNumber, data.audio);
+          const key = `audio_tracking:${cleanNumber}`;
+          const audioUrls = await this.cache.get(key);
+          
+          if (audioUrls) {
+            const isTrackedAudio = Object.values(audioUrls).includes(data.audio);
+            if (!isTrackedAudio) {
+              console.log("DEBUG: Found untracked audio while tracking others, skipping");
+              return null;
+            }
+            console.log("DEBUG: Found tracked audio, continuing with send");
+          }
         }
         
         const mediaData: SendAudioDto = { ...data };
