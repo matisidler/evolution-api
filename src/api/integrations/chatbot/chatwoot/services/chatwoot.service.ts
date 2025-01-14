@@ -1184,8 +1184,9 @@ export class ChatwootService {
       // Check if we're processing an audio for this number
       const senderPhone = body.conversation?.meta?.sender?.phone_number;
       if (senderPhone) {
-        const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
-        const key = `audio_tracking:${cleanNumber}`;
+        // const cleanNumber = senderPhone.replace(/[+@].*$/, '').replace(/\D/g, '');
+        console.log("DEBUG: SENDER PHONE: ", senderPhone)
+        const key = `audio_tracking:${senderPhone}`;
         const audioUrls = await this.cache.get(key);
         console.log("DEBUG: Filtering by key: ", key, "with value: ", audioUrls)
         console.log("DEBUG: DATA URL: ", body.conversation?.messages?.[0]?.attachments?.[0]?.data_url)
