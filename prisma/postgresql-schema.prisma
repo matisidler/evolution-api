@@ -75,6 +75,7 @@ model Chat {
 
   @@index([instanceId])
   @@index([remoteJid])
+  @@unique([remoteJid, instanceId])
 }
 
 model Contact {

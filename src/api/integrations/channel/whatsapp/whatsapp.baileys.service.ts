@@ -76,6 +76,7 @@ import {
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@exceptions';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import { Boom } from '@hapi/boom';
+import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance } from '@prisma/client';
 import { makeProxyAgent } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
@@ -268,20 +269,9 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async getProfileStatus() {
-    const statusResult = await this.client.fetchStatus(this.instance.wuid);
-    if (!statusResult) return null;
-    
-    interface StatusType {
-      status?: string;
-    }
-    
-    if (Array.isArray(statusResult)) {
-      const firstResult = statusResult[0] as StatusType;
-      return firstResult?.status ?? null;
-    }
-    
-    const result = statusResult as StatusType;
-    return result?.status ?? null;
+    const status = await this.client.fetchStatus(this.instance.wuid);
+
+    return status[0]?.status;
   }
 
   public get profilePictureUrl() {
@@ -984,7 +974,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
         const messagesRaw: any[] = [];
 
-        const messagesRepository = new Set(
+        const messagesRepository: Set<string> = new Set(
           chatwootImport.getRepositoryMessagesCache(instance) ??
             (
               await this.prismaRepository.message.findMany({
@@ -1146,21 +1136,25 @@ export class BaileysStartupService extends ChannelStartupService {
           }
           const existingChat = await this.prismaRepository.chat.findFirst({
             where: { instanceId: this.instanceId, remoteJid: received.key.remoteJid },
+            select: { id: true, name: true },
           });
 
-          if (existingChat) {
-            const chatToInsert = {
-              remoteJid: received.key.remoteJid,
-              instanceId: this.instanceId,
-              name: received.pushName || '',
-              unreadMessages: 0,
-            };
-
-            this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
+          if (
+            existingChat &&
+            received.pushName &&
+            existingChat.name !== received.pushName &&
+            received.pushName.trim().length > 0
+          ) {
+            this.sendDataWebhook(Events.CHATS_UPSERT, [{ ...existingChat, name: received.pushName }]);
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
-              await this.prismaRepository.chat.create({
-                data: chatToInsert,
-              });
+              try {
+                await this.prismaRepository.chat.update({
+                  where: { id: existingChat.id },
+                  data: { name: received.pushName },
+                });
+              } catch (error) {
+                console.log(`Chat insert record ignored: ${received.key.remoteJid} - ${this.instanceId}`);
+              }
             }
           }
 
@@ -1497,9 +1491,16 @@ export class BaileysStartupService extends ChannelStartupService {
 
             this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
-              await this.prismaRepository.chat.create({
-                data: chatToInsert,
-              });
+              try {
+                await this.prismaRepository.chat.update({
+                  where: {
+                    id: existingChat.id,
+                  },
+                  data: chatToInsert,
+                });
+              } catch (error) {
+                console.log(`Chat insert record ignored: ${chatToInsert.remoteJid} - ${chatToInsert.instanceId}`);
+              }
             }
           }
         }
@@ -1537,6 +1538,8 @@ export class BaileysStartupService extends ChannelStartupService {
 
   private readonly labelHandle = {
     [Events.LABELS_EDIT]: async (label: Label) => {
+      this.sendDataWebhook(Events.LABELS_EDIT, { ...label, instance: this.instance.name });
+
       const labelsRepository = await this.prismaRepository.label.findMany({
         where: { instanceId: this.instanceId },
       });
@@ -1571,7 +1574,6 @@ export class BaileysStartupService extends ChannelStartupService {
             create: labelData,
           });
         }
-        this.sendDataWebhook(Events.LABELS_EDIT, { ...label, instance: this.instance.name });
       }
     },
 
@@ -1579,26 +1581,18 @@ export class BaileysStartupService extends ChannelStartupService {
       data: { association: LabelAssociation; type: 'remove' | 'add' },
       database: Database,
     ) => {
+      this.logger.info(
+        `labels association - ${data?.association?.chatId} (${data.type}-${data?.association?.type}): ${data?.association?.labelId}`,
+      );
       if (database.SAVE_DATA.CHATS) {
-        const chats = await this.prismaRepository.chat.findMany({
-          where: { instanceId: this.instanceId },
-        });
-        const chat = chats.find((c) => c.remoteJid === data.association.chatId);
-        if (chat) {
-          const labelsArray = Array.isArray(chat.labels) ? chat.labels.map((event) => String(event)) : [];
-          let labels = [...labelsArray];
+        const instanceId = this.instanceId;
+        const chatId = data.association.chatId;
+        const labelId = data.association.labelId;
 
-          if (data.type === 'remove') {
-            labels = labels.filter((label) => label !== data.association.labelId);
-          } else if (data.type === 'add') {
-            labels = [...labels, data.association.labelId];
-          }
-          await this.prismaRepository.chat.update({
-            where: { id: chat.id },
-            data: {
-              labels,
-            },
-          });
+        if (data.type === 'add') {
+          await this.addLabel(labelId, instanceId, chatId);
+        } else if (data.type === 'remove') {
+          await this.removeLabel(labelId, instanceId, chatId);
         }
       }
 
@@ -1816,7 +1810,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
       return {
         wuid: jid,
-        status: statusText
+        status: (await this.client.fetchStatus(jid))[0]?.status,
       };
     } catch (error) {
       return {
@@ -2086,9 +2080,9 @@ export class BaileysStartupService extends ChannelStartupService {
         try {
             const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
 
-            if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
-              throw new BadRequestException(isWA);
-            }
+    if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
+      throw new BadRequestException(isWA);
+    }
 
             const sender = isWA.jid.toLowerCase();
 
@@ -2158,6 +2152,17 @@ export class BaileysStartupService extends ChannelStartupService {
                   return jid;
                 });
               }
+        if (options?.mentionsEveryOne) {
+          mentions = group.participants.map((participant) => participant.id);
+        } else if (options?.mentioned?.length) {
+          mentions = options.mentioned.map((mention) => {
+            const jid = this.createJid(mention);
+            if (isJidGroup(jid)) {
+              return null;
+            }
+            return jid;
+          });
+        }
 
               messageSent = await this.sendMessage(
                 sender,
@@ -2938,58 +2943,75 @@ export class BaileysStartupService extends ChannelStartupService {
     }
   }
 
+
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
-    this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. isIntegration: ${isIntegration}, data: ${JSON.stringify(data)}, file: ${JSON.stringify(file)}`);
-    const mediaData: SendAudioDto = { ...data };
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        this.logger.debug(`[AUDIO_DEBUG] Starting audioWhatsapp processing. Attempt ${attempt}/${this.maxRetries}. isIntegration: ${isIntegration}, data: ${JSON.stringify(data)}, file: ${JSON.stringify(file)}`);
+        const mediaData: SendAudioDto = { ...data };
 
-    if (file?.buffer) {
-        this.logger.debug('[AUDIO_DEBUG] Using file buffer for audio');
-        mediaData.audio = file.buffer.toString('base64');
-    } else if (!isURL(data.audio) && !isBase64(data.audio)) {
-        console.error('Invalid file or audio source');
-        throw new BadRequestException('File buffer, URL, or base64 audio is required');
-    }
+        if (file?.buffer) {
+          this.logger.debug('[AUDIO_DEBUG] Using file buffer for audio');
+          mediaData.audio = file.buffer.toString('base64');
+        } else if (!isURL(data.audio) && !isBase64(data.audio)) {
+          console.error('Invalid file or audio source');
+          throw new BadRequestException('File buffer, URL, or base64 audio is required');
+        }
 
-    if (!data?.encoding && data?.encoding !== false) {
-        data.encoding = true;
-    }
+        if (!data?.encoding && data?.encoding !== false) {
+          data.encoding = true;
+        }
 
-    this.logger.debug(`[AUDIO_DEBUG] Audio encoding enabled: ${data.encoding}`);
+        this.logger.debug(`[AUDIO_DEBUG] Audio encoding enabled: ${data.encoding}`);
 
-    if (data?.encoding) {
-        this.logger.debug('[AUDIO_DEBUG] Starting audio processing');
-        const convert = await this.processAudio(mediaData.audio);
+        if (data?.encoding) {
+          this.logger.debug('[AUDIO_DEBUG] Starting audio processing');
+          const convert = await this.processAudio(mediaData.audio);
 
-        if (Buffer.isBuffer(convert)) {
+          if (Buffer.isBuffer(convert)) {
             this.logger.debug('[AUDIO_DEBUG] Audio successfully converted, sending message');
             const result = this.sendMessageWithTyping<AnyMessageContent>(
-                data.number,
-                {
-                    audio: convert,
-                    ptt: true,
-                    mimetype: 'audio/ogg; codecs=opus',
-                },
-                { presence: 'recording', delay: data?.delay },
-                isIntegration,
+              data.number,
+              {
+                audio: convert,
+                ptt: true,
+                mimetype: 'audio/ogg; codecs=opus',
+              },
+              { presence: 'recording', delay: data?.delay },
+              isIntegration,
             );
 
             return result;
-        } else {
+          } else {
             throw new InternalServerErrorException('Failed to convert audio');
+          }
         }
-    }
 
-    this.logger.debug('[AUDIO_DEBUG] Sending audio without encoding');
-    return await this.sendMessageWithTyping<AnyMessageContent>(
-        data.number,
-        {
+        this.logger.debug('[AUDIO_DEBUG] Sending audio without encoding');
+        return await this.sendMessageWithTyping<AnyMessageContent>(
+          data.number,
+          {
             audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
             ptt: true,
             mimetype: 'audio/ogg; codecs=opus',
-        },
-        { presence: 'recording', delay: data?.delay },
-        isIntegration,
-    );
+          },
+          { presence: 'recording', delay: data?.delay },
+          isIntegration,
+        );
+      } catch (error) {
+        lastError = error;
+        this.logger.error(`Attempt ${attempt} failed to process audio: ${error?.toString() || error}`);
+        
+        if (attempt < this.maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          continue;
+        }
+      }
+    }
+
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   private generateRandomId(length = 11) {
@@ -3943,11 +3965,13 @@ export class BaileysStartupService extends ChannelStartupService {
     try {
       if (data.action === 'add') {
         await this.client.addChatLabel(contact.jid, data.labelId);
+        await this.addLabel(data.labelId, this.instanceId, contact.jid);
 
         return { numberJid: contact.jid, labelId: data.labelId, add: true };
       }
       if (data.action === 'remove') {
         await this.client.removeChatLabel(contact.jid, data.labelId);
+        await this.removeLabel(data.labelId, this.instanceId, contact.jid);
 
         return { numberJid: contact.jid, labelId: data.labelId, remove: true };
       }
@@ -4292,6 +4316,7 @@ export class BaileysStartupService extends ChannelStartupService {
       throw new BadRequestException('Unable to leave the group', error.toString());
     }
   }
+
   public async templateMessage() {
     throw new Error('Method not available in the Baileys service');
   }
@@ -4326,6 +4351,19 @@ export class BaileysStartupService extends ChannelStartupService {
       messageRaw.messageType = 'documentMessage';
       messageRaw.message.documentMessage = messageRaw.message.documentWithCaptionMessage.message.documentMessage;
       delete messageRaw.message.documentWithCaptionMessage;
+    }
+
+    const quotedMessage = messageRaw?.contextInfo?.quotedMessage;
+    if (quotedMessage) {
+      if (quotedMessage.extendedTextMessage) {
+        quotedMessage.conversation = quotedMessage.extendedTextMessage.text;
+        delete quotedMessage.extendedTextMessage;
+      }
+
+      if (quotedMessage.documentWithCaptionMessage) {
+        quotedMessage.documentMessage = quotedMessage.documentWithCaptionMessage.message.documentMessage;
+        delete quotedMessage.documentWithCaptionMessage;
+      }
     }
 
     return messageRaw;
@@ -4394,5 +4432,53 @@ export class BaileysStartupService extends ChannelStartupService {
     }
 
     return unreadMessages;
+  }
+
+  private async addLabel(labelId: string, instanceId: string, chatId: string) {
+    const id = cuid();
+
+    await this.prismaRepository.$executeRawUnsafe(
+      `INSERT INTO "Chat" ("id", "instanceId", "remoteJid", "labels", "createdAt", "updatedAt")
+       VALUES ($4, $2, $3, to_jsonb(ARRAY[$1]::text[]), NOW(), NOW()) ON CONFLICT ("instanceId", "remoteJid")
+     DO
+      UPDATE
+          SET "labels" = (
+          SELECT to_jsonb(array_agg(DISTINCT elem))
+          FROM (
+          SELECT jsonb_array_elements_text("Chat"."labels") AS elem
+          UNION
+          SELECT $1::text AS elem
+          ) sub
+          ),
+          "updatedAt" = NOW();`,
+      labelId,
+      instanceId,
+      chatId,
+      id,
+    );
+  }
+
+  private async removeLabel(labelId: string, instanceId: string, chatId: string) {
+    const id = cuid();
+
+    await this.prismaRepository.$executeRawUnsafe(
+      `INSERT INTO "Chat" ("id", "instanceId", "remoteJid", "labels", "createdAt", "updatedAt")
+       VALUES ($4, $2, $3, '[]'::jsonb, NOW(), NOW()) ON CONFLICT ("instanceId", "remoteJid")
+     DO
+      UPDATE
+          SET "labels" = COALESCE (
+          (
+          SELECT jsonb_agg(elem)
+          FROM jsonb_array_elements_text("Chat"."labels") AS elem
+          WHERE elem <> $1
+          ),
+          '[]'::jsonb
+          ),
+          "updatedAt" = NOW();`,
+      labelId,
+      instanceId,
+      chatId,
+      id,
+    );
   }
 }
