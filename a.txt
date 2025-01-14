@@ -1,0 +1,156 @@
+DEBUG MESSAGE 1: DEBUG Messages:  [
+
+  {
+
+    id: 807,
+
+    content: null,
+
+    account_id: 1,
+
+    inbox_id: 2,
+
+    conversation_id: 11,
+
+    message_type: 1,
+
+    created_at: 1736817846,
+
+    updated_at: '2025-01-14T01:24:06.365Z',
+
+    private: false,
+
+    status: 'sent',
+
+    source_id: null,
+
+    content_type: 'text',
+
+    content_attributes: {},
+
+    sender_type: 'User',
+
+    sender_id: 1,
+
+    external_source_ids: {},
+
+    additional_attributes: {},
+
+    processed_message_content: null,
+
+    sentiment: {},
+
+    conversation: {
+
+      assignee_id: null,
+
+      unread_count: 0,
+
+      last_activity_at: 1736817846,
+
+      contact_inbox: [Object]
+
+    },
+
+    attachments: [ [Object] ],
+
+    sender: {
+
+      id: 1,
+
+      name: 'Matias',
+
+      available_name: 'Matias',
+
+      avatar_url: '',
+
+      type: 'user',
+
+      availability_status: null,
+
+      thumbnail: ''
+
+    }
+
+  }
+
+]
+
+
+DEBUG MESSAGE 2: DEBUG Messages:  [
+
+  {
+
+    id: 807,
+
+    content: null,
+
+    account_id: 1,
+
+    inbox_id: 2,
+
+    conversation_id: 11,
+
+    message_type: 1,
+
+    created_at: 1736817850,
+
+    updated_at: '2025-01-14T01:24:10.935Z',
+
+    private: false,
+
+    status: 'sent',
+
+    source_id: 'WAID:3EB0665BD0A10A34A80982705C21613C14D513C7',
+
+    content_type: 'text',
+
+    content_attributes: {},
+
+    sender_type: 'User',
+
+    sender_id: 1,
+
+    external_source_ids: {},
+
+    additional_attributes: {},
+
+    processed_message_content: null,
+
+    sentiment: {},
+
+    conversation: {
+
+      assignee_id: null,
+
+      unread_count: 0,
+
+      last_activity_at: 1736817850,
+
+      contact_inbox: [Object]
+
+    },
+
+    attachments: [ [Object] ],
+
+    sender: {
+
+      id: 1,
+
+      name: 'Matias',
+
+      available_name: 'Matias',
+
+      avatar_url: '',
+
+      type: 'user',
+
+      availability_status: null,
+
+      thumbnail: ''
+
+    }
+
+  }
+
+]

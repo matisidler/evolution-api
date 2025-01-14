@@ -1184,10 +1184,12 @@ export class ChatwootService {
         console.log("DEBUG: Attachments from body: ", body.conversation.messages[0].attachments)
         console.log("DEBUG Meta sender: ", body.conversation.meta.sender)
         console.log("DEBUG Messages: ", body.conversation.messages)
-        // if (!body.conversation.messages[0].source_id){
-        //   console.log("DEBUG: No source_id found, returning. ID: ", body.id)
-        //   return null
-        // }
+        if (body.conversation.messages[0].source_id === null){
+          console.log("DEBUG: No source_id found, returning. ID: ", body.id)
+          return { message: 'bot' }
+        } else {
+          console.log("DEBUG: Source_id found, continuing. ID: ", body.id)
+        }
       } catch (error) {
         console.log("DEBUG: Error getting body: ", error)
       }
