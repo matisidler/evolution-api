@@ -1096,7 +1096,6 @@ export class ChatwootService {
           break;
       }
 
-      // Handle audio messages differently to prevent duplication
       if (type === 'audio') {
         const data: SendMediaDto = {
           number: number,
@@ -1105,6 +1104,8 @@ export class ChatwootService {
           media: media,
           delay: 1200,
           quoted: options?.quoted,
+          ptt: true, // Set ptt flag for voice messages
+          mimetype: 'audio/ogg; codecs=opus'
         };
 
         sendTelemetry('/message/sendMedia');

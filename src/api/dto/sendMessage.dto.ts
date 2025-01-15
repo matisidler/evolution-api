@@ -72,14 +72,19 @@ export class SendPollDto extends Metadata {
 
 export type MediaType = 'image' | 'document' | 'video' | 'audio' | 'ptv';
 
-export class SendMediaDto extends Metadata {
-  mediatype: MediaType;
-  mimetype?: string;
-  caption?: string;
-  // for document
-  fileName?: string;
-  // url or base64
+export interface SendMediaDto {
+  number: string;
   media: string;
+  fileName?: string;
+  caption?: string;
+  mediatype?: string;
+  delay?: number;
+  quoted?: Quoted;
+  linkPreview?: boolean;
+  mentionsEveryOne?: boolean;
+  mentioned?: string[];
+  ptt?: boolean;
+  mimetype?: string;
 }
 
 export class SendPtvDto extends Metadata {
