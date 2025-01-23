@@ -11,40 +11,68 @@ export class S3Service {
   private readonly logger = new Logger('S3Service');
 
   public async getMedia(instance: InstanceDto, query?: MediaDto) {
-    try {
-      const where: any = {
-        instanceId: instance.instanceId,
-        ...query,
-      };
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
 
-      const media = await this.prismaRepository.media.findMany({
-        where,
-        select: {
-          id: true,
-          fileName: true,
-          type: true,
-          mimetype: true,
-          createdAt: true,
-          Message: true,
-        },
-      });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const where: any = {
+          instanceId: instance.instanceId,
+          ...query,
+        };
 
-      if (!media || media.length === 0) {
-        throw 'Media not found';
+        const media = await this.prismaRepository.media.findMany({
+          where,
+          select: {
+            id: true,
+            fileName: true,
+            type: true,
+            mimetype: true,
+            createdAt: true,
+            Message: true,
+          },
+        });
+
+        if (!media || media.length === 0) {
+          throw 'Media not found';
+        }
+
+        return media;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for instance: ${instance.instanceId}`);
+        }
       }
-
-      return media;
-    } catch (error) {
-      throw new BadRequestException(error);
     }
+
+    throw new BadRequestException(lastError);
   }
 
   public async getMediaUrl(instance: InstanceDto, data: MediaDto) {
-    const media = (await this.getMedia(instance, { id: data.id }))[0];
-    const mediaUrl = await getObjectUrl(media.fileName, data.expiry);
-    return {
-      mediaUrl,
-      ...media,
-    };
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const media = (await this.getMedia(instance, { id: data.id }))[0];
+        const mediaUrl = await getObjectUrl(media.fileName, data.expiry);
+        return {
+          mediaUrl,
+          ...media,
+        };
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for media ID: ${data.id}`);
+        }
+      }
+    }
+
+    throw new BadRequestException(lastError);
   }
 }

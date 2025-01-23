@@ -86,7 +86,21 @@ export class ChatwootController {
 
     const chatwootCache = new CacheService(new CacheEngine(this.configService, ChatwootService.name).getEngine());
     const chatwootService = new ChatwootService(waMonitor, this.configService, this.prismaRepository, chatwootCache);
-
+    console.log('receiveWebhook executed:')
+    console.log("instance: ", instance)
+    console.log("data: ", data)
+    if (data.attachments?.length > 0) {
+      const dataUrl = data.attachments[0].data_url;
+      const urlParts = dataUrl.split('/');
+      const fileNameWithExt = urlParts[urlParts.length - 1];
+      const [fileName, fileExt] = fileNameWithExt.split('.');
+      // if (fileExt === 'oga') {
+        // if (fileName.length <= 6) {
+        //   console.log("fileName: ", fileName, "returning null")
+        //   return { message: 'bot' };
+        // }
+      // }
+    }
     return chatwootService.receiveWebhook(instance, data);
   }
 }

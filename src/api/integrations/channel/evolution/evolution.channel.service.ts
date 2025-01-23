@@ -550,44 +550,61 @@ export class EvolutionStartupService extends ChannelStartupService {
   }
 
   protected async prepareMediaMessage(mediaMessage: MediaMessage) {
-    try {
-      if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
-        const regex = new RegExp(/.*\/(.+?)\./);
-        const arrayMatch = regex.exec(mediaMessage.media);
-        mediaMessage.fileName = arrayMatch[1];
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
+          const regex = new RegExp(/.*\/(.+?)\./);
+          const arrayMatch = regex.exec(mediaMessage.media);
+          mediaMessage.fileName = arrayMatch[1];
+        }
+
+        if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'image.png';
+        }
+
+        if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'video.mp4';
+        }
+
+        let mimetype: string | false;
+
+        const prepareMedia: any = {
+          caption: mediaMessage?.caption,
+          fileName: mediaMessage.fileName,
+          mediaType: mediaMessage.mediatype,
+          media: mediaMessage.media,
+          gifPlayback: false,
+        };
+
+        if (isURL(mediaMessage.media)) {
+          mimetype = mimeTypes.lookup(mediaMessage.media);
+        } else {
+          mimetype = mimeTypes.lookup(mediaMessage.fileName);
+        }
+
+        prepareMedia.mimetype = mimetype;
+
+        return prepareMedia;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for preparing media message`);
+          
+          // If it's a validation error, don't retry
+          if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+            throw error;
+          }
+        }
       }
-
-      if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'image.png';
-      }
-
-      if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'video.mp4';
-      }
-
-      let mimetype: string | false;
-
-      const prepareMedia: any = {
-        caption: mediaMessage?.caption,
-        fileName: mediaMessage.fileName,
-        mediaType: mediaMessage.mediatype,
-        media: mediaMessage.media,
-        gifPlayback: false,
-      };
-
-      if (isURL(mediaMessage.media)) {
-        mimetype = mimeTypes.lookup(mediaMessage.media);
-      } else {
-        mimetype = mimeTypes.lookup(mediaMessage.fileName);
-      }
-
-      prepareMedia.mimetype = mimetype;
-
-      return prepareMedia;
-    } catch (error) {
-      this.logger.error(error);
-      throw new InternalServerErrorException(error?.toString() || error);
     }
+
+    this.logger.error(lastError);
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   public async mediaMessage(data: SendMediaDto, file?: any, isIntegration = false) {

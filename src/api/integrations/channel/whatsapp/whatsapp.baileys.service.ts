@@ -2094,246 +2094,215 @@ export class BaileysStartupService extends ChannelStartupService {
     options?: Options,
     isIntegration = false,
   ) {
-    const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
 
-    if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
-      throw new BadRequestException(isWA);
-    }
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
 
-    const sender = isWA.jid.toLowerCase();
-
-    this.logger.verbose(`Sending message to ${sender}`);
-
-    try {
-      if (options?.delay) {
-        this.logger.verbose(`Typing for ${options.delay}ms to ${sender}`);
-        if (options.delay > 20000) {
-          let remainingDelay = options.delay;
-          while (remainingDelay > 20000) {
-            await this.client.presenceSubscribe(sender);
-
-            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-            await delay(20000);
-
-            await this.client.sendPresenceUpdate('paused', sender);
-
-            remainingDelay -= 20000;
-          }
-          if (remainingDelay > 0) {
-            await this.client.presenceSubscribe(sender);
-
-            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-            await delay(remainingDelay);
-
-            await this.client.sendPresenceUpdate('paused', sender);
-          }
-        } else {
-          await this.client.presenceSubscribe(sender);
-
-          await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
-
-          await delay(options.delay);
-
-          await this.client.sendPresenceUpdate('paused', sender);
-        }
-      }
-
-      const linkPreview = options?.linkPreview != false ? undefined : false;
-
-      let quoted: WAMessage;
-
-      if (options?.quoted) {
-        const m = options?.quoted;
-
-        const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
-
-        if (msg) {
-          quoted = msg;
-        }
-      }
-
-      let messageSent: WAMessage;
-
-      let mentions: string[];
-      if (isJidGroup(sender)) {
-        let group;
-        try {
-          const cache = this.configService.get<CacheConf>('CACHE');
-          if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED) group = await this.findGroup({ groupJid: sender }, 'inner');
-          else group = await this.getGroupMetadataCache(sender);
-        } catch (error) {
-          throw new NotFoundException('Group not found');
+        if (!isWA.exists && !isJidGroup(isWA.jid) && !isWA.jid.includes('@broadcast')) {
+          throw new BadRequestException(isWA);
         }
 
-        if (!group) {
-          throw new NotFoundException('Group not found');
-        }
+        const sender = isWA.jid.toLowerCase();
 
-        if (options?.mentionsEveryOne) {
-          mentions = group.participants.map((participant) => participant.id);
-        } else if (options?.mentioned?.length) {
-          mentions = options.mentioned.map((mention) => {
-            const jid = createJid(mention);
-            if (isJidGroup(jid)) {
-              return null;
+        this.logger.verbose(`Sending message to ${sender}`);
+
+        if (options?.delay) {
+          this.logger.verbose(`Typing for ${options.delay}ms to ${sender}`);
+          if (options.delay > 20000) {
+            let remainingDelay = options.delay;
+            while (remainingDelay > 20000) {
+              await this.client.presenceSubscribe(sender);
+
+              await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+
+              await delay(20000);
+
+              await this.client.sendPresenceUpdate('paused', sender);
+
+              remainingDelay -= 20000;
             }
-            return jid;
+            if (remainingDelay > 0) {
+              await this.client.presenceSubscribe(sender);
+
+              await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+
+              await delay(remainingDelay);
+
+              await this.client.sendPresenceUpdate('paused', sender);
+            }
+          } else {
+            await this.client.presenceSubscribe(sender);
+
+            await this.client.sendPresenceUpdate((options.presence as WAPresence) ?? 'composing', sender);
+
+            await delay(options.delay);
+
+            await this.client.sendPresenceUpdate('paused', sender);
+          }
+        }
+
+        const linkPreview = options?.linkPreview != false ? undefined : false;
+
+        let quoted: WAMessage;
+
+        if (options?.quoted) {
+          const m = options?.quoted;
+
+          const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
+
+          if (msg) {
+            quoted = msg;
+          }
+        }
+
+        let messageSent: WAMessage;
+
+        let mentions: string[];
+        if (isJidGroup(sender)) {
+          let group;
+          try {
+            const cache = this.configService.get<CacheConf>('CACHE');
+            if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED) group = await this.findGroup({ groupJid: sender }, 'inner');
+            else group = await this.getGroupMetadataCache(sender);
+          } catch (error) {
+            throw new NotFoundException('Group not found');
+          }
+
+          if (!group) {
+            throw new NotFoundException('Group not found');
+          }
+
+          if (options?.mentionsEveryOne) {
+            mentions = group.participants.map((participant) => participant.id);
+          } else if (options?.mentioned?.length) {
+            mentions = options.mentioned.map((mention) => {
+              const jid = createJid(mention);
+              if (isJidGroup(jid)) {
+                return null;
+              }
+              return jid;
+            });
+          }
+
+          messageSent = await this.sendMessage(
+            sender,
+            message,
+            mentions,
+            linkPreview,
+            quoted,
+            null,
+            group?.ephemeralDuration,
+            // group?.participants,
+          );
+        } else {
+          messageSent = await this.sendMessage(sender, message, mentions, linkPreview, quoted);
+        }
+
+        if (Long.isLong(messageSent?.messageTimestamp)) {
+          messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
+        }
+
+        const messageRaw = this.prepareMessage(messageSent);
+
+        const isMedia =
+          messageSent?.message?.imageMessage ||
+          messageSent?.message?.videoMessage ||
+          messageSent?.message?.stickerMessage ||
+          messageSent?.message?.ptvMessage ||
+          messageSent?.message?.documentMessage ||
+          messageSent?.message?.documentWithCaptionMessage ||
+          messageSent?.message?.ptvMessage ||
+          messageSent?.message?.audioMessage;
+
+        if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && !isIntegration) {
+          this.chatwootService.eventWhatsapp(
+            Events.SEND_MESSAGE,
+            { instanceName: this.instance.name, instanceId: this.instanceId },
+            messageRaw,
+          );
+        }
+
+        if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
+          const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
+            where: {
+              instanceId: this.instanceId,
+            },
+            include: {
+              OpenaiCreds: true,
+            },
+          });
+
+          if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
+            messageRaw.message.speechToText = await this.openaiService.speechToText(
+              openAiDefaultSettings.OpenaiCreds,
+              messageRaw,
+              this.client.updateMediaMessage,
+            );
+          }
+        }
+
+        if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
+          const msg = await this.prismaRepository.message.create({
+            data: messageRaw,
+          });
+
+        }
+
+        if (this.localWebhook.enabled) {
+          if (isMedia && this.localWebhook.webhookBase64) {
+            try {
+              const buffer = await downloadMediaMessage(
+                { key: messageRaw.key, message: messageRaw?.message },
+                'buffer',
+                {},
+                {
+                  logger: P({ level: 'error' }) as any,
+                  reuploadRequest: this.client.updateMediaMessage,
+                },
+              );
+
+              messageRaw.message.base64 = buffer ? buffer.toString('base64') : undefined;
+            } catch (error) {
+              this.logger.error(['Error converting media to base64', error?.message]);
+            }
+          }
+        }
+
+        this.logger.log(messageRaw);
+
+        this.sendDataWebhook(Events.SEND_MESSAGE, messageRaw);
+
+        if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && isIntegration) {
+          await chatbotController.emit({
+            instance: { instanceName: this.instance.name, instanceId: this.instanceId },
+            remoteJid: messageRaw.key.remoteJid,
+            msg: messageRaw,
+            pushName: messageRaw.pushName,
+            isIntegration,
           });
         }
 
-        messageSent = await this.sendMessage(
-          sender,
-          message,
-          mentions,
-          linkPreview,
-          quoted,
-          null,
-          group?.ephemeralDuration,
-          // group?.participants,
-        );
-      } else {
-        messageSent = await this.sendMessage(sender, message, mentions, linkPreview, quoted);
-      }
-
-      if (Long.isLong(messageSent?.messageTimestamp)) {
-        messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
-      }
-
-      const messageRaw = this.prepareMessage(messageSent);
-
-      const isMedia =
-        messageSent?.message?.imageMessage ||
-        messageSent?.message?.videoMessage ||
-        messageSent?.message?.stickerMessage ||
-        messageSent?.message?.ptvMessage ||
-        messageSent?.message?.documentMessage ||
-        messageSent?.message?.documentWithCaptionMessage ||
-        messageSent?.message?.ptvMessage ||
-        messageSent?.message?.audioMessage;
-
-      if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && !isIntegration) {
-        this.chatwootService.eventWhatsapp(
-          Events.SEND_MESSAGE,
-          { instanceName: this.instance.name, instanceId: this.instanceId },
-          messageRaw,
-        );
-      }
-
-      if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
-        const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
-          where: {
-            instanceId: this.instanceId,
-          },
-          include: {
-            OpenaiCreds: true,
-          },
-        });
-
-        if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-          messageRaw.message.speechToText = await this.openaiService.speechToText(
-            openAiDefaultSettings.OpenaiCreds,
-            messageRaw,
-            this.client.updateMediaMessage,
-          );
-        }
-      }
-
-      if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
-        const msg = await this.prismaRepository.message.create({
-          data: messageRaw,
-        });
-
-        if (isMedia && this.configService.get<S3>('S3').ENABLE) {
-          try {
-            const message: any = messageRaw;
-            const media = await this.getBase64FromMediaMessage(
-              {
-                message,
-              },
-              true,
-            );
-
-            const { buffer, mediaType, fileName, size } = media;
-
-            const mimetype = mimeTypes.lookup(fileName).toString();
-
-            const fullName = join(
-              `${this.instance.id}`,
-              messageRaw.key.remoteJid,
-              `${messageRaw.key.id}`,
-              mediaType,
-              fileName,
-            );
-
-            await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
-              'Content-Type': mimetype,
-            });
-
-            await this.prismaRepository.media.create({
-              data: {
-                messageId: msg.id,
-                instanceId: this.instanceId,
-                type: mediaType,
-                fileName: fullName,
-                mimetype,
-              },
-            });
-
-            const mediaUrl = await s3Service.getObjectUrl(fullName);
-
-            messageRaw.message.mediaUrl = mediaUrl;
-
-            await this.prismaRepository.message.update({
-              where: { id: msg.id },
-              data: messageRaw,
-            });
-          } catch (error) {
-            this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
+        return messageRaw;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for sending message to: ${number}`);
+          
+          // If it's a BadRequestException, don't retry
+          if (error instanceof BadRequestException) {
+            throw error;
           }
         }
       }
-
-      if (this.localWebhook.enabled) {
-        if (isMedia && this.localWebhook.webhookBase64) {
-          try {
-            const buffer = await downloadMediaMessage(
-              { key: messageRaw.key, message: messageRaw?.message },
-              'buffer',
-              {},
-              {
-                logger: P({ level: 'error' }) as any,
-                reuploadRequest: this.client.updateMediaMessage,
-              },
-            );
-
-            messageRaw.message.base64 = buffer ? buffer.toString('base64') : undefined;
-          } catch (error) {
-            this.logger.error(['Error converting media to base64', error?.message]);
-          }
-        }
-      }
-
-      this.logger.log(messageRaw);
-
-      this.sendDataWebhook(Events.SEND_MESSAGE, messageRaw);
-
-      if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && isIntegration) {
-        await chatbotController.emit({
-          instance: { instanceName: this.instance.name, instanceId: this.instanceId },
-          remoteJid: messageRaw.key.remoteJid,
-          msg: messageRaw,
-          pushName: messageRaw.pushName,
-          isIntegration,
-        });
-      }
-
-      return messageRaw;
-    } catch (error) {
-      this.logger.error(error);
-      throw new BadRequestException(error.toString());
     }
+
+    this.logger.error(lastError);
+    throw new BadRequestException(lastError.toString());
   }
 
   // Instance Controller
@@ -2858,125 +2827,166 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async processAudio(audio: string): Promise<Buffer> {
-    if (process.env.API_AUDIO_CONVERTER) {
-      this.logger.verbose('Using audio converter API');
-      const formData = new FormData();
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
 
-      if (isURL(audio)) {
-        formData.append('url', audio);
-      } else {
-        formData.append('base64', audio);
-      }
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (process.env.API_AUDIO_CONVERTER) {
+          this.logger.verbose('Using audio converter API');
+          const formData = new FormData();
 
-      const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
-        headers: {
-          ...formData.getHeaders(),
-          apikey: process.env.API_AUDIO_CONVERTER_KEY,
-        },
-      });
+          if (isURL(audio)) {
+            formData.append('url', audio);
+          } else {
+            formData.append('base64', audio);
+          }
 
-      if (!data.audio) {
-        throw new InternalServerErrorException('Failed to convert audio');
-      }
-
-      this.logger.verbose('Audio converted');
-      return Buffer.from(data.audio, 'base64');
-    } else {
-      let inputAudioStream: PassThrough;
-
-      if (isURL(audio)) {
-        const timestamp = new Date().getTime();
-        const url = `${audio}?timestamp=${timestamp}`;
-
-        const config: any = {
-          responseType: 'stream',
-        };
-
-        const response = await axios.get(url, config);
-        inputAudioStream = response.data.pipe(new PassThrough());
-      } else {
-        const audioBuffer = Buffer.from(audio, 'base64');
-        inputAudioStream = new PassThrough();
-        inputAudioStream.end(audioBuffer);
-      }
-
-      return new Promise((resolve, reject) => {
-        const outputAudioStream = new PassThrough();
-        const chunks: Buffer[] = [];
-
-        outputAudioStream.on('data', (chunk) => chunks.push(chunk));
-        outputAudioStream.on('end', () => {
-          const outputBuffer = Buffer.concat(chunks);
-          resolve(outputBuffer);
-        });
-
-        outputAudioStream.on('error', (error) => {
-          console.log('error', error);
-          reject(error);
-        });
-
-        ffmpeg.setFfmpegPath(ffmpegPath.path);
-
-        ffmpeg(inputAudioStream)
-          .outputFormat('ogg')
-          .noVideo()
-          .audioCodec('libopus')
-          .addOutputOptions('-avoid_negative_ts make_zero')
-          .audioChannels(1)
-          .pipe(outputAudioStream, { end: true })
-          .on('error', function (error) {
-            console.log('error', error);
-            reject(error);
+          const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
+            headers: {
+              ...formData.getHeaders(),
+              apikey: process.env.API_AUDIO_CONVERTER_KEY,
+            },
           });
-      });
+
+          if (!data.audio) {
+            throw new InternalServerErrorException('Failed to convert audio');
+          }
+
+          this.logger.verbose('Audio converted');
+          return Buffer.from(data.audio, 'base64');
+        } else {
+          let inputAudioStream: PassThrough;
+
+          if (isURL(audio)) {
+            const timestamp = new Date().getTime();
+            const url = `${audio}?timestamp=${timestamp}`;
+
+            const config: any = {
+              responseType: 'stream',
+            };
+
+            const response = await axios.get(url, config);
+            inputAudioStream = response.data.pipe(new PassThrough());
+          } else {
+            const audioBuffer = Buffer.from(audio, 'base64');
+            inputAudioStream = new PassThrough();
+            inputAudioStream.end(audioBuffer);
+          }
+
+          return new Promise((resolve, reject) => {
+            const outputAudioStream = new PassThrough();
+            const chunks: Buffer[] = [];
+
+            outputAudioStream.on('data', (chunk) => chunks.push(chunk));
+            outputAudioStream.on('end', () => {
+              const outputBuffer = Buffer.concat(chunks);
+              resolve(outputBuffer);
+            });
+
+            outputAudioStream.on('error', (error) => {
+              reject(error);
+            });
+
+            ffmpeg.setFfmpegPath(ffmpegPath.path);
+
+            ffmpeg(inputAudioStream)
+              .outputFormat('ogg')
+              .noVideo()
+              .audioCodec('libopus')
+              .addOutputOptions('-avoid_negative_ts make_zero')
+              .audioChannels(1)
+              .pipe(outputAudioStream, { end: true })
+              .on('error', function (error) {
+                reject(error);
+              });
+          });
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for processing audio`);
+          
+          // If it's a validation error, don't retry
+          if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+            throw error;
+          }
+        }
+      }
     }
+
+    this.logger.error(lastError);
+    throw new InternalServerErrorException('Failed to process audio: ' + lastError?.toString());
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
-    const mediaData: SendAudioDto = { ...data };
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
 
-    if (file?.buffer) {
-      mediaData.audio = file.buffer.toString('base64');
-    } else if (!isURL(data.audio) && !isBase64(data.audio)) {
-      console.error('Invalid file or audio source');
-      throw new BadRequestException('File buffer, URL, or base64 audio is required');
-    }
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const mediaData: SendAudioDto = { ...data };
 
-    if (!data?.encoding && data?.encoding !== false) {
-      data.encoding = true;
-    }
+        if (file?.buffer) {
+          mediaData.audio = file.buffer.toString('base64');
+        } else if (!isURL(data.audio) && !isBase64(data.audio)) {
+          throw new BadRequestException('File buffer, URL, or base64 audio is required');
+        }
 
-    if (data?.encoding) {
-      const convert = await this.processAudio(mediaData.audio);
+        if (!data?.encoding && data?.encoding !== false) {
+          data.encoding = true;
+        }
 
-      if (Buffer.isBuffer(convert)) {
-        const result = this.sendMessageWithTyping<AnyMessageContent>(
+        if (data?.encoding) {
+          const convert = await this.processAudio(mediaData.audio);
+
+          if (Buffer.isBuffer(convert)) {
+            const result = this.sendMessageWithTyping<AnyMessageContent>(
+              data.number,
+              {
+                audio: convert,
+                ptt: true,
+                mimetype: 'audio/ogg; codecs=opus',
+              },
+              { presence: 'recording', delay: data?.delay },
+              isIntegration,
+            );
+
+            return result;
+          } else {
+            throw new InternalServerErrorException('Failed to convert audio');
+          }
+        }
+
+        return await this.sendMessageWithTyping<AnyMessageContent>(
           data.number,
           {
-            audio: convert,
+            audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
             ptt: true,
             mimetype: 'audio/ogg; codecs=opus',
           },
           { presence: 'recording', delay: data?.delay },
           isIntegration,
         );
-
-        return result;
-      } else {
-        throw new InternalServerErrorException('Failed to convert audio');
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for audio message`);
+          
+          // If it's a validation error, don't retry
+          if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+            throw error;
+          }
+        }
       }
     }
 
-    return await this.sendMessageWithTyping<AnyMessageContent>(
-      data.number,
-      {
-        audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
-        ptt: true,
-        mimetype: 'audio/ogg; codecs=opus',
-      },
-      { presence: 'recording', delay: data?.delay },
-      isIntegration,
-    );
+    this.logger.error(lastError);
+    throw new BadRequestException(lastError.toString());
   }
 
   private generateRandomId(length = 11) {
@@ -4340,7 +4350,7 @@ export class BaileysStartupService extends ChannelStartupService {
       const prepare = (message: any) => this.prepareMessage(message);
       this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
 
-      const task = cron.schedule('0,30 * * * *', async () => {
+      const task = cron.schedule('*/5 * * * *', async () => {
         this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
       });
       task.start();
