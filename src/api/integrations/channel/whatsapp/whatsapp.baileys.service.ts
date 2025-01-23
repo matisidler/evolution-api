@@ -2526,117 +2526,134 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   private async prepareMediaMessage(mediaMessage: MediaMessage) {
-    try {
-      const type = mediaMessage.mediatype === 'ptv' ? 'video' : mediaMessage.mediatype;
+    const maxRetries = 10;
+    const baseDelay = 500; // 0.5 seconds in milliseconds
+    let lastError: any;
 
-      const prepareMedia = await prepareWAMessageMedia(
-        {
-          [type]: isURL(mediaMessage.media) ? { url: mediaMessage.media } : Buffer.from(mediaMessage.media, 'base64'),
-        } as any,
-        { upload: this.client.waUploadToServer },
-      );
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const type = mediaMessage.mediatype === 'ptv' ? 'video' : mediaMessage.mediatype;
 
-      const mediaType = mediaMessage.mediatype + 'Message';
-
-      if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
-        const regex = new RegExp(/.*\/(.+?)\./);
-        const arrayMatch = regex.exec(mediaMessage.media);
-        mediaMessage.fileName = arrayMatch[1];
-      }
-
-      if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'image.png';
-      }
-
-      if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
-        mediaMessage.fileName = 'video.mp4';
-      }
-
-      let mimetype: string | false;
-
-      if (mediaMessage.mimetype) {
-        mimetype = mediaMessage.mimetype;
-      } else {
-        mimetype = mimeTypes.lookup(mediaMessage.fileName);
-
-        if (!mimetype && isURL(mediaMessage.media)) {
-          let config: any = {
-            responseType: 'arraybuffer',
-          };
-
-          if (this.localProxy?.enabled) {
-            config = {
-              ...config,
-              httpsAgent: makeProxyAgent({
-                host: this.localProxy.host,
-                port: this.localProxy.port,
-                protocol: this.localProxy.protocol,
-                username: this.localProxy.username,
-                password: this.localProxy.password,
-              }),
-            };
-          }
-
-          const response = await axios.get(mediaMessage.media, config);
-
-          mimetype = response.headers['content-type'];
-        }
-      }
-
-      if (mediaMessage.mediatype === 'ptv') {
-        prepareMedia[mediaType] = prepareMedia[type + 'Message'];
-        mimetype = 'video/mp4';
-
-        if (!prepareMedia[mediaType]) {
-          throw new Error('Failed to prepare video message');
-        }
-
-        try {
-          let mediaInput;
-          if (isURL(mediaMessage.media)) {
-            mediaInput = mediaMessage.media;
-          } else {
-            const mediaBuffer = Buffer.from(mediaMessage.media, 'base64');
-            if (!mediaBuffer || mediaBuffer.length === 0) {
-              throw new Error('Invalid media buffer');
-            }
-            mediaInput = mediaBuffer;
-          }
-
-          const duration = await getVideoDuration(mediaInput);
-          if (!duration || duration <= 0) {
-            throw new Error('Invalid media duration');
-          }
-
-          this.logger.verbose(`Video duration: ${duration} seconds`);
-          prepareMedia[mediaType].seconds = duration;
-        } catch (error) {
-          this.logger.error('Error getting video duration:');
-          this.logger.error(error);
-          throw new Error(`Failed to get video duration: ${error.message}`);
-        }
-      }
-
-      prepareMedia[mediaType].caption = mediaMessage?.caption;
-      prepareMedia[mediaType].mimetype = mimetype;
-      prepareMedia[mediaType].fileName = mediaMessage.fileName;
-
-      if (mediaMessage.mediatype === 'video') {
-        prepareMedia[mediaType].jpegThumbnail = Uint8Array.from(
-          readFileSync(join(process.cwd(), 'public', 'images', 'video-cover.png')),
+        const prepareMedia = await prepareWAMessageMedia(
+          {
+            [type]: isURL(mediaMessage.media) ? { url: mediaMessage.media } : Buffer.from(mediaMessage.media, 'base64'),
+          } as any,
+          { upload: this.client.waUploadToServer },
         );
-        prepareMedia[mediaType].gifPlayback = false;
-      }
 
-      return generateWAMessageFromContent(
-        '',
-        { [mediaType]: { ...prepareMedia[mediaType] } },
-        { userJid: this.instance.wuid },
-      );
-    } catch (error) {
-      this.logger.error(error);
-      throw new InternalServerErrorException(error?.toString() || error);
+        const mediaType = mediaMessage.mediatype + 'Message';
+
+        if (mediaMessage.mediatype === 'document' && !mediaMessage.fileName) {
+          const regex = new RegExp(/.*\/(.+?)\./);
+          const arrayMatch = regex.exec(mediaMessage.media);
+          mediaMessage.fileName = arrayMatch[1];
+        }
+
+        if (mediaMessage.mediatype === 'image' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'image.png';
+        }
+
+        if (mediaMessage.mediatype === 'video' && !mediaMessage.fileName) {
+          mediaMessage.fileName = 'video.mp4';
+        }
+
+        let mimetype: string | false;
+
+        if (mediaMessage.mimetype) {
+          mimetype = mediaMessage.mimetype;
+        } else {
+          mimetype = mimeTypes.lookup(mediaMessage.fileName);
+
+          if (!mimetype && isURL(mediaMessage.media)) {
+            let config: any = {
+              responseType: 'arraybuffer',
+            };
+
+            if (this.localProxy?.enabled) {
+              config = {
+                ...config,
+                httpsAgent: makeProxyAgent({
+                  host: this.localProxy.host,
+                  port: this.localProxy.port,
+                  protocol: this.localProxy.protocol,
+                  username: this.localProxy.username,
+                  password: this.localProxy.password,
+                }),
+              };
+            }
+
+            const response = await axios.get(mediaMessage.media, config);
+
+            mimetype = response.headers['content-type'];
+          }
+        }
+
+        if (mediaMessage.mediatype === 'ptv') {
+          prepareMedia[mediaType] = prepareMedia[type + 'Message'];
+          mimetype = 'video/mp4';
+
+          if (!prepareMedia[mediaType]) {
+            throw new Error('Failed to prepare video message');
+          }
+
+          try {
+            let mediaInput;
+            if (isURL(mediaMessage.media)) {
+              mediaInput = mediaMessage.media;
+            } else {
+              const mediaBuffer = Buffer.from(mediaMessage.media, 'base64');
+              if (!mediaBuffer || mediaBuffer.length === 0) {
+                throw new Error('Invalid media buffer');
+              }
+              mediaInput = mediaBuffer;
+            }
+
+            const duration = await getVideoDuration(mediaInput);
+            if (!duration || duration <= 0) {
+              throw new Error('Invalid media duration');
+            }
+
+            this.logger.verbose(`Video duration: ${duration} seconds`);
+            prepareMedia[mediaType].seconds = duration;
+          } catch (error) {
+            this.logger.error('Error getting video duration:');
+            this.logger.error(error);
+            throw new Error(`Failed to get video duration: ${error.message}`);
+          }
+        }
+
+        prepareMedia[mediaType].caption = mediaMessage?.caption;
+        prepareMedia[mediaType].mimetype = mimetype;
+        prepareMedia[mediaType].fileName = mediaMessage.fileName;
+
+        if (mediaMessage.mediatype === 'video') {
+          prepareMedia[mediaType].jpegThumbnail = Uint8Array.from(
+            readFileSync(join(process.cwd(), 'public', 'images', 'video-cover.png')),
+          );
+          prepareMedia[mediaType].gifPlayback = false;
+        }
+
+        return generateWAMessageFromContent(
+          '',
+          { [mediaType]: { ...prepareMedia[mediaType] } },
+          { userJid: this.instance.wuid },
+        );
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for preparing media message`);
+          
+          // If it's a validation error, don't retry
+          if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+            throw error;
+          }
+        }
+      }
     }
+
+    this.logger.error(lastError);
+    throw new InternalServerErrorException(lastError?.toString() || lastError);
   }
 
   private async convertToWebP(image: string): Promise<Buffer> {
