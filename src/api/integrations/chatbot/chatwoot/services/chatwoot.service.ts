@@ -1946,6 +1946,12 @@ export class ChatwootService {
             },
           });
 
+          // Skip audio messages with 0 duration
+          if (body?.message?.audioMessage && body.message.audioMessage.seconds === 0) {
+            this.logger.warn('Skipping audio message with 0 duration');
+            return;
+          }
+
           let nameFile: string;
           const messageBody = body?.message[body?.messageType];
           const originalFilename =
@@ -2041,6 +2047,7 @@ export class ChatwootService {
               {
                 message: { extendedTextMessage: { contextInfo: { stanzaId: reactionMessage.key.id } } },
               },
+
               'WAID:' + body.key.id,
               quotedMsg,
             );
