@@ -1297,24 +1297,24 @@ export class BaileysStartupService extends ChannelStartupService {
                     'Content-Type': mimetype,
                   });
 
-                  await this.prismaRepository.media.create({
-                    data: {
-                      messageId: msg.id,
-                      instanceId: this.instanceId,
-                      type: mediaType,
-                      fileName: fullName,
-                      mimetype,
-                    },
-                  });
+                  // await this.prismaRepository.media.create({
+                  //   data: {
+                  //     messageId: msg.id,
+                  //     instanceId: this.instanceId,
+                  //     type: mediaType,
+                  //     fileName: fullName,
+                  //     mimetype,
+                  //   },
+                  // });
 
                   const mediaUrl = await s3Service.getObjectUrl(fullName);
 
                   messageRaw.message.mediaUrl = mediaUrl;
 
-                  await this.prismaRepository.message.update({
-                    where: { id: msg.id },
-                    data: messageRaw,
-                  });
+                  // await this.prismaRepository.message.update({
+                  //   where: { id: msg.id },
+                  //   data: messageRaw,
+                  // });
                 } catch (error) {
                   this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
                 }
@@ -2166,7 +2166,8 @@ export class BaileysStartupService extends ChannelStartupService {
           let group;
           try {
             const cache = this.configService.get<CacheConf>('CACHE');
-            if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED) group = await this.findGroup({ groupJid: sender }, 'inner');
+            if (!cache.REDIS.ENABLED && !cache.LOCAL.ENABLED)
+              group = await this.findGroup({ groupJid: sender }, 'inner');
             else group = await this.getGroupMetadataCache(sender);
           } catch (error) {
             throw new NotFoundException('Group not found');
@@ -2249,7 +2250,6 @@ export class BaileysStartupService extends ChannelStartupService {
           const msg = await this.prismaRepository.message.create({
             data: messageRaw,
           });
-
         }
 
         if (this.localWebhook.enabled) {
@@ -2290,9 +2290,9 @@ export class BaileysStartupService extends ChannelStartupService {
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          await new Promise((resolve) => setTimeout(resolve, baseDelay));
           this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for sending message to: ${number}`);
-          
+
           // If it's a BadRequestException, don't retry
           if (error instanceof BadRequestException) {
             throw error;
@@ -2641,9 +2641,9 @@ export class BaileysStartupService extends ChannelStartupService {
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          await new Promise((resolve) => setTimeout(resolve, baseDelay));
           this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for preparing media message`);
-          
+
           // If it's a validation error, don't retry
           if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
             throw error;
@@ -2923,9 +2923,9 @@ export class BaileysStartupService extends ChannelStartupService {
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          await new Promise((resolve) => setTimeout(resolve, baseDelay));
           this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for processing audio`);
-          
+
           // If it's a validation error, don't retry
           if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
             throw error;
@@ -2991,9 +2991,9 @@ export class BaileysStartupService extends ChannelStartupService {
       } catch (error) {
         lastError = error;
         if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, baseDelay));
+          await new Promise((resolve) => setTimeout(resolve, baseDelay));
           this.logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} for audio message`);
-          
+
           // If it's a validation error, don't retry
           if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
             throw error;
@@ -4361,18 +4361,7 @@ export class BaileysStartupService extends ChannelStartupService {
     return messageRaw;
   }
 
-  private async syncChatwootLostMessages() {
-    if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled && false) {
-      const chatwootConfig = await this.findChatwoot();
-      const prepare = (message: any) => this.prepareMessage(message);
-      this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
-
-      const task = cron.schedule('*/5 * * * *', async () => {
-        this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
-      });
-      task.start();
-    }
-  }
+  private async syncChatwootLostMessages() {}
 
   private async updateMessagesReadedByTimestamp(remoteJid: string, timestamp?: number): Promise<number> {
     if (timestamp === undefined || timestamp === null) return 0;
