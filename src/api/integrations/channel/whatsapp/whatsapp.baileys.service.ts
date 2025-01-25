@@ -1225,16 +1225,20 @@ export class BaileysStartupService extends ChannelStartupService {
             this.localChatwoot?.enabled &&
             !received.key.id.includes('@broadcast')
           ) {
-            const chatwootSentMessage = await this.chatwootService.eventWhatsapp(
-              Events.MESSAGES_UPSERT,
-              { instanceName: this.instance.name, instanceId: this.instance.id },
-              messageRaw,
-            );
+            // Skip Chatwoot processing for audio messages from integrations
+            const isAudioFromIntegration = received?.message?.audioMessage && messageRaw?.source === 'integration';
+            if (!isAudioFromIntegration) {
+              const chatwootSentMessage = await this.chatwootService.eventWhatsapp(
+                Events.MESSAGES_UPSERT,
+                { instanceName: this.instance.name, instanceId: this.instance.id },
+                messageRaw,
+              );
 
-            if (chatwootSentMessage?.id) {
-              messageRaw.chatwootMessageId = chatwootSentMessage.id;
-              messageRaw.chatwootInboxId = chatwootSentMessage.inbox_id;
-              messageRaw.chatwootConversationId = chatwootSentMessage.conversation_id;
+              if (chatwootSentMessage?.id) {
+                messageRaw.chatwootMessageId = chatwootSentMessage.id;
+                messageRaw.chatwootInboxId = chatwootSentMessage.inbox_id;
+                messageRaw.chatwootConversationId = chatwootSentMessage.conversation_id;
+              }
             }
           }
 
@@ -1257,7 +1261,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
+          if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE && !received?.message?.audioMessage) {
             const msg = await this.prismaRepository.message.create({
               data: messageRaw,
             });
@@ -1297,24 +1301,24 @@ export class BaileysStartupService extends ChannelStartupService {
                     'Content-Type': mimetype,
                   });
 
-                  // await this.prismaRepository.media.create({
-                  //   data: {
-                  //     messageId: msg.id,
-                  //     instanceId: this.instanceId,
-                  //     type: mediaType,
-                  //     fileName: fullName,
-                  //     mimetype,
-                  //   },
-                  // });
+                  await this.prismaRepository.media.create({
+                    data: {
+                      messageId: msg.id,
+                      instanceId: this.instanceId,
+                      type: mediaType,
+                      fileName: fullName,
+                      mimetype,
+                    },
+                  });
 
                   const mediaUrl = await s3Service.getObjectUrl(fullName);
 
                   messageRaw.message.mediaUrl = mediaUrl;
 
-                  // await this.prismaRepository.message.update({
-                  //   where: { id: msg.id },
-                  //   data: messageRaw,
-                  // });
+                  await this.prismaRepository.message.update({
+                    where: { id: msg.id },
+                    data: messageRaw,
+                  });
                 } catch (error) {
                   this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
                 }
@@ -2246,7 +2250,7 @@ export class BaileysStartupService extends ChannelStartupService {
           }
         }
 
-        if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
+        if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE && !messageRaw?.message?.audioMessage) {
           const msg = await this.prismaRepository.message.create({
             data: messageRaw,
           });
