@@ -1363,17 +1363,36 @@ export class BaileysStartupService extends ChannelStartupService {
     },
 
     'messages.update': async (args: WAMessageUpdate[], settings: any) => {
-      this.logger.log(`Update messages ${JSON.stringify(args, undefined, 2)}`);
+      console.log('🔄 Messages Update Event:', {
+        numberOfUpdates: args.length,
+        updates: args.map((arg) => ({
+          messageId: arg.key.id,
+          remoteJid: arg.key.remoteJid,
+          status: arg.update.status,
+          hasMessage: !!arg.update.message,
+        })),
+      });
 
       const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
 
       for await (const { key, update } of args) {
+        console.log('📝 Processing update:', {
+          messageId: key.id,
+          remoteJid: key.remoteJid,
+          fromMe: key.fromMe,
+          status: update.status,
+          hasMessage: !!update.message,
+        });
+
         if (settings?.groupsIgnore && key.remoteJid?.includes('@g.us')) {
+          console.log('⏭️ Skipping group message');
           continue;
         }
 
         if (status[update.status] === 'READ' && key.fromMe) {
+          console.log('👀 Message marked as READ:', { messageId: key.id });
           if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled) {
+            console.log('📤 Sending read event to Chatwoot');
             this.chatwootService.eventWhatsapp(
               'messages.read',
               { instanceName: this.instance.name, instanceId: this.instanceId },
@@ -1406,11 +1425,19 @@ export class BaileysStartupService extends ChannelStartupService {
             },
           });
 
+          console.log('🔍 Database message lookup:', {
+            messageId: key.id,
+            found: !!findMessage,
+            status: findMessage?.status,
+          });
+
           if (!findMessage) {
+            console.log('⚠️ Message not found in database, skipping');
             continue;
           }
 
           if (update.message === null && update.status === undefined) {
+            console.log('🗑️ Message deletion detected:', { messageId: key.id });
             this.sendDataWebhook(Events.MESSAGES_DELETE, key);
 
             const message: any = {
@@ -1438,11 +1465,21 @@ export class BaileysStartupService extends ChannelStartupService {
 
             continue;
           } else if (update.status !== undefined && status[update.status] !== findMessage.status) {
+            console.log('📊 Status update:', {
+              messageId: key.id,
+              oldStatus: findMessage.status,
+              newStatus: status[update.status],
+              timestamp: findMessage.messageTimestamp,
+            });
+
             if (!key.fromMe && key.remoteJid) {
               readChatToUpdate[key.remoteJid] = true;
 
               if (status[update.status] === status[4]) {
-                this.logger.log(`Update as read ${key.remoteJid} - ${findMessage.messageTimestamp}`);
+                console.log('✅ Updating messages as read:', {
+                  chat: key.remoteJid,
+                  timestamp: findMessage.messageTimestamp,
+                });
                 this.updateMessagesReadedByTimestamp(key.remoteJid, findMessage.messageTimestamp);
               }
             }
@@ -1464,6 +1501,8 @@ export class BaileysStartupService extends ChannelStartupService {
             instanceId: this.instanceId,
           };
 
+          console.log('message executed!!!', message);
+
           this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
@@ -1483,6 +1522,8 @@ export class BaileysStartupService extends ChannelStartupService {
               unreadMessages: 0,
             };
 
+            console.log('sendDataWebhook executed!!!');
+
             this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
             if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
               await this.prismaRepository.chat.create({
@@ -1493,6 +1534,9 @@ export class BaileysStartupService extends ChannelStartupService {
         }
       }
 
+      console.log('🔄 Final chat updates:', {
+        chatsToUpdate: Object.keys(readChatToUpdate),
+      });
       await Promise.all(Object.keys(readChatToUpdate).map((remoteJid) => this.updateChatUnreadMessages(remoteJid)));
     },
   };
