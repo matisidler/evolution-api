@@ -1464,7 +1464,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
 
             continue;
-          } else if (update.status !== undefined && status[update.status] !== findMessage.status && false) {
+          } else if (update.status !== undefined && status[update.status] !== findMessage.status) {
             console.log('📊 Status update:', {
               messageId: key.id,
               oldStatus: findMessage.status,
@@ -1510,27 +1510,27 @@ export class BaileysStartupService extends ChannelStartupService {
               data: message,
             });
 
-          const existingChat = await this.prismaRepository.chat.findFirst({
-            where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
-          });
+          // const existingChat = await this.prismaRepository.chat.findFirst({
+          //   where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
+          // });
 
-          if (existingChat) {
-            const chatToInsert = {
-              remoteJid: message.remoteJid,
-              instanceId: this.instanceId,
-              name: message.pushName || '',
-              unreadMessages: 0,
-            };
+          // if (existingChat) {
+          //   const chatToInsert = {
+          //     remoteJid: message.remoteJid,
+          //     instanceId: this.instanceId,
+          //     name: message.pushName || '',
+          //     unreadMessages: 0,
+          //   };
 
-            console.log('sendDataWebhook executed!!!');
+          //   console.log('sendDataWebhook executed!!!');
 
-            this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
-            if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
-              await this.prismaRepository.chat.create({
-                data: chatToInsert,
-              });
-            }
-          }
+          //   this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
+          //   if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
+          //     await this.prismaRepository.chat.create({
+          //       data: chatToInsert,
+          //     });
+          //   }
+          // }
         }
       }
 
