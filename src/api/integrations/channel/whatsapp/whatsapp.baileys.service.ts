@@ -1464,7 +1464,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
 
             continue;
-          } else if (update.status !== undefined && status[update.status] !== findMessage.status) {
+          } else if (update.status !== undefined && status[update.status] !== findMessage.status && false) {
             console.log('📊 Status update:', {
               messageId: key.id,
               oldStatus: findMessage.status,
