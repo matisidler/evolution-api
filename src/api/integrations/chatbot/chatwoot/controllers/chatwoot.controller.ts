@@ -110,6 +110,25 @@ export class ChatwootController {
         console.log('🎵 Audio message detected:', { messageId, sourceId });
 
         const cacheKey = String(messageId);
+
+        // First check: Look for previous message (messageId - 1)
+        const previousMessageKey = String(messageId - 1);
+        const previousMessage = this.audioMessageCache.get(previousMessageKey);
+
+        if (
+          previousMessage &&
+          Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
+          previousMessage.sourceId !== sourceId
+        ) {
+          console.log('⚠️ Sequential duplicate detected:', {
+            currentMessageId: messageId,
+            previousMessageId: previousMessage.messageId,
+            timeDiff: Date.now() - previousMessage.timestamp,
+          });
+          return;
+        }
+
+        // Store the current message
         this.audioMessageCache.set(cacheKey, {
           messageId,
           sourceId,
@@ -117,7 +136,7 @@ export class ChatwootController {
           processed: false,
         });
 
-        // Increased wait time to 1000ms
+        // Second check: Wait for potential simultaneous duplicates
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const messageInfo = this.audioMessageCache.get(cacheKey);
@@ -131,7 +150,7 @@ export class ChatwootController {
           processed: true,
         });
 
-        // Updated time window to 1000ms as well
+        // Look for simultaneous duplicates
         const duplicates = Array.from(this.audioMessageCache.values()).filter(
           (msg) =>
             msg.messageId === messageId &&
@@ -140,7 +159,7 @@ export class ChatwootController {
         );
 
         if (duplicates.length > 0) {
-          console.log('⚠️ Duplicate audio messages found:', {
+          console.log('⚠️ Simultaneous duplicate messages found:', {
             originalSourceId: sourceId,
             duplicateSourceIds: duplicates.map((d) => d.sourceId),
           });
