@@ -106,7 +106,7 @@ export class ChatwootController {
       const messageId = attachment?.message_id;
       const sourceId = data?.source_id;
 
-      if (messageId && sourceId) {
+      if (messageId) {
         console.log('🎵 Audio message detected:', { messageId, sourceId });
 
         const cacheKey = String(messageId);
