@@ -88,17 +88,28 @@ export class ChatwootController {
 
     // Safely check for audio attachment
     const attachment = data?.attachments?.[0];
+    console.log('📥 Webhook received:', {
+      hasAttachment: !!attachment,
+      fileType: attachment?.file_type,
+      messageId: attachment?.message_id,
+      sourceId: data?.source_id,
+    });
+
     if (attachment?.file_type === 'audio') {
       const messageId = attachment?.message_id;
       const sourceId = data?.source_id;
 
       if (messageId && sourceId) {
+        console.log('🎵 Audio message detected:', { messageId, sourceId });
+
         // Store the audio message info
         this.audioMessageCache.set(String(messageId), {
           messageId,
           sourceId,
           timestamp: Date.now(),
         });
+
+        console.log('💾 Current cache state:', Object.fromEntries(this.audioMessageCache));
 
         // Clean up old entries (older than 10 seconds)
         this.cleanupAudioCache();
@@ -107,12 +118,20 @@ export class ChatwootController {
         const previousMessageKey = String(messageId - 1);
         const previousMessage = this.audioMessageCache.get(previousMessageKey);
 
-        if (
-          previousMessage &&
-          Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
-          previousMessage.sourceId !== sourceId
-        ) {
-          return; // Early return for duplicate audio message
+        if (previousMessage) {
+          console.log('🔍 Found previous message:', {
+            timeDiff: Date.now() - previousMessage.timestamp,
+            previousSourceId: previousMessage.sourceId,
+            currentSourceId: sourceId,
+          });
+
+          if (
+            Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
+            previousMessage.sourceId !== sourceId
+          ) {
+            console.log('⚠️ Duplicate audio message detected - Early return');
+            return;
+          }
         }
       }
     }
@@ -125,10 +144,19 @@ export class ChatwootController {
 
   private cleanupAudioCache() {
     const tenSecondsAgo = Date.now() - 10000;
+    const sizeBefore = this.audioMessageCache.size;
+
     for (const [key, value] of this.audioMessageCache.entries()) {
       if (value.timestamp < tenSecondsAgo) {
         this.audioMessageCache.delete(key);
       }
+    }
+
+    if (sizeBefore !== this.audioMessageCache.size) {
+      console.log('🧹 Cache cleanup:', {
+        entriesRemoved: sizeBefore - this.audioMessageCache.size,
+        remainingEntries: this.audioMessageCache.size,
+      });
     }
   }
 }
