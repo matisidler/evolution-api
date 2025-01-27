@@ -31,14 +31,18 @@ export class ChatwootRouter extends RouterBroker {
         res.status(HttpStatus.OK).json(response);
       })
       .post(this.routerPath('webhook'), async (req, res) => {
-        const response = await this.dataValidate<InstanceDto>({
+        // Immediately respond with 200 OK
+        res.status(HttpStatus.OK).json({ message: 'Webhook received' });
+
+        // Process webhook data in the background
+        this.dataValidate<InstanceDto>({
           request: req,
           schema: instanceSchema,
           ClassRef: InstanceDto,
           execute: (instance, data) => chatwootController.receiveWebhook(instance, data),
+        }).catch((error) => {
+          console.error('Error processing webhook:', error);
         });
-
-        res.status(HttpStatus.OK).json(response);
       });
   }
 
