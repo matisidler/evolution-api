@@ -10,7 +10,15 @@ import { BadRequestException } from '@exceptions';
 import { isURL } from 'class-validator';
 
 export class ChatwootController {
-  private audioMessageCache = new Map<string, { messageId: number; sourceId: string; timestamp: number }>();
+  private audioMessageCache = new Map<
+    string,
+    {
+      messageId: number;
+      sourceId: string;
+      timestamp: number;
+      processed: boolean;
+    }
+  >();
 
   constructor(
     private readonly chatwootService: ChatwootService,
@@ -86,7 +94,6 @@ export class ChatwootController {
   public async receiveWebhook(instance: InstanceDto, data: any) {
     if (!this.configService.get<Chatwoot>('CHATWOOT').ENABLED) throw new BadRequestException('Chatwoot is disabled');
 
-    // Safely check for audio attachment
     const attachment = data?.attachments?.[0];
     console.log('📥 Webhook received:', {
       hasAttachment: !!attachment,
@@ -102,39 +109,49 @@ export class ChatwootController {
       if (messageId && sourceId) {
         console.log('🎵 Audio message detected:', { messageId, sourceId });
 
-        // Store the audio message info
-        this.audioMessageCache.set(String(messageId), {
+        const cacheKey = String(messageId);
+        this.audioMessageCache.set(cacheKey, {
           messageId,
           sourceId,
           timestamp: Date.now(),
+          processed: false,
         });
 
-        console.log('💾 Current cache state:', Object.fromEntries(this.audioMessageCache));
+        // Increased wait time to 1000ms
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        // Clean up old entries (older than 10 seconds)
-        this.cleanupAudioCache();
-
-        // Check if this is a duplicate message
-        const previousMessageKey = String(messageId - 1);
-        const previousMessage = this.audioMessageCache.get(previousMessageKey);
-
-        if (previousMessage) {
-          console.log('🔍 Found previous message:', {
-            timeDiff: Date.now() - previousMessage.timestamp,
-            previousSourceId: previousMessage.sourceId,
-            currentSourceId: sourceId,
-          });
-
-          if (
-            Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
-            previousMessage.sourceId !== sourceId
-          ) {
-            console.log('⚠️ Duplicate audio message detected - Early return');
-            return;
-          }
+        const messageInfo = this.audioMessageCache.get(cacheKey);
+        if (messageInfo?.processed) {
+          console.log('🔄 Message already processed:', { messageId });
+          return;
         }
+
+        this.audioMessageCache.set(cacheKey, {
+          ...messageInfo!,
+          processed: true,
+        });
+
+        // Updated time window to 1000ms as well
+        const duplicates = Array.from(this.audioMessageCache.values()).filter(
+          (msg) =>
+            msg.messageId === messageId &&
+            msg.sourceId !== sourceId &&
+            Math.abs(msg.timestamp - messageInfo!.timestamp) <= 1000,
+        );
+
+        if (duplicates.length > 0) {
+          console.log('⚠️ Duplicate audio messages found:', {
+            originalSourceId: sourceId,
+            duplicateSourceIds: duplicates.map((d) => d.sourceId),
+          });
+          return;
+        }
+
+        console.log('✅ Processing audio message:', { messageId, sourceId });
       }
     }
+
+    this.cleanupAudioCache();
 
     const chatwootCache = new CacheService(new CacheEngine(this.configService, ChatwootService.name).getEngine());
     const chatwootService = new ChatwootService(waMonitor, this.configService, this.prismaRepository, chatwootCache);
