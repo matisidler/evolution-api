@@ -1182,6 +1182,7 @@ export class BaileysStartupService extends ChannelStartupService {
               { instanceName: this.instance.name, instanceId: this.instance.id },
               messageRaw,
             );
+            console.log('ChatwootSentMessage???', chatwootSentMessage);
 
             if (chatwootSentMessage?.id) {
               messageRaw.chatwootMessageId = chatwootSentMessage.id;
