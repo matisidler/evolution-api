@@ -10,6 +10,8 @@ import { BadRequestException } from '@exceptions';
 import { isURL } from 'class-validator';
 
 export class ChatwootController {
+  private audioMessageCache = new Map<string, { messageId: number; sourceId: string; timestamp: number }>();
+
   constructor(
     private readonly chatwootService: ChatwootService,
     private readonly configService: ConfigService,
@@ -84,9 +86,49 @@ export class ChatwootController {
   public async receiveWebhook(instance: InstanceDto, data: any) {
     if (!this.configService.get<Chatwoot>('CHATWOOT').ENABLED) throw new BadRequestException('Chatwoot is disabled');
 
+    // Safely check for audio attachment
+    const attachment = data?.attachments?.[0];
+    if (attachment?.file_type === 'audio') {
+      const messageId = attachment?.message_id;
+      const sourceId = data?.source_id;
+
+      if (messageId && sourceId) {
+        // Store the audio message info
+        this.audioMessageCache.set(String(messageId), {
+          messageId,
+          sourceId,
+          timestamp: Date.now(),
+        });
+
+        // Clean up old entries (older than 10 seconds)
+        this.cleanupAudioCache();
+
+        // Check if this is a duplicate message
+        const previousMessageKey = String(messageId - 1);
+        const previousMessage = this.audioMessageCache.get(previousMessageKey);
+
+        if (
+          previousMessage &&
+          Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
+          previousMessage.sourceId !== sourceId
+        ) {
+          return; // Early return for duplicate audio message
+        }
+      }
+    }
+
     const chatwootCache = new CacheService(new CacheEngine(this.configService, ChatwootService.name).getEngine());
     const chatwootService = new ChatwootService(waMonitor, this.configService, this.prismaRepository, chatwootCache);
 
     return chatwootService.receiveWebhook(instance, data);
+  }
+
+  private cleanupAudioCache() {
+    const tenSecondsAgo = Date.now() - 10000;
+    for (const [key, value] of this.audioMessageCache.entries()) {
+      if (value.timestamp < tenSecondsAgo) {
+        this.audioMessageCache.delete(key);
+      }
+    }
   }
 }
