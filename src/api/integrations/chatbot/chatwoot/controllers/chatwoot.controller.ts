@@ -93,6 +93,7 @@ export class ChatwootController {
 
   public async receiveWebhook(instance: InstanceDto, data: any) {
     if (!this.configService.get<Chatwoot>('CHATWOOT').ENABLED) throw new BadRequestException('Chatwoot is disabled');
+    return;
 
     const attachment = data?.attachments?.[0];
     console.log('📥 Webhook received:', {
@@ -101,6 +102,7 @@ export class ChatwootController {
       messageId: attachment?.message_id,
       sourceId: data?.source_id,
     });
+
 
     if (attachment?.file_type === 'audio') {
       const messageId = attachment?.message_id;

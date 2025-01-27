@@ -4271,7 +4271,6 @@ export class BaileysStartupService extends ChannelStartupService {
       instanceId: this.instanceId,
       source: getDevice(message.key.id),
     };
-    console.log('prepareMessage executed! messageRaw:', messageRaw);
 
     if (!messageRaw.status && message.key.fromMe === false) {
       messageRaw.status = status[3]; // DELIVERED MESSAGE
