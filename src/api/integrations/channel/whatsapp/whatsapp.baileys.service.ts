@@ -1601,7 +1601,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
   private eventHandler() {
     this.client.ev.process(async (events) => {
-      console.log('eventHandler executed! events:', events);
+      console.log('eventHandler executed! events:', JSON.stringify(events, null, 2));
       if (!this.endSession) {
         const database = this.configService.get<Database>('DATABASE');
         const settings = await this.findSettings();
