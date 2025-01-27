@@ -1231,47 +1231,47 @@ export class BaileysStartupService extends ChannelStartupService {
               await this.updateMessagesReadedByTimestamp(received.key.remoteJid, msg.messageTimestamp);
             }
 
-            if (isMedia) {
-              if (this.configService.get<S3>('S3').ENABLE) {
-                try {
-                  const message: any = received;
-                  const media = await this.getBase64FromMediaMessage(
-                    {
-                      message,
-                    },
-                    true,
-                  );
+            // if (isMedia) {
+            //   if (this.configService.get<S3>('S3').ENABLE) {
+            //     try {
+            //       const message: any = received;
+            //       const media = await this.getBase64FromMediaMessage(
+            //         {
+            //           message,
+            //         },
+            //         true,
+            //       );
 
-                  const { buffer, mediaType, fileName, size } = media;
-                  const mimetype = mime.getType(fileName).toString();
-                  const fullName = join(`${this.instance.id}`, received.key.remoteJid, mediaType, fileName);
-                  await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
-                    'Content-Type': mimetype,
-                  });
+            //       const { buffer, mediaType, fileName, size } = media;
+            //       const mimetype = mime.getType(fileName).toString();
+            //       const fullName = join(`${this.instance.id}`, received.key.remoteJid, mediaType, fileName);
+            //       await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
+            //         'Content-Type': mimetype,
+            //       });
 
-                  await this.prismaRepository.media.create({
-                    data: {
-                      messageId: msg.id,
-                      instanceId: this.instanceId,
-                      type: mediaType,
-                      fileName: fullName,
-                      mimetype,
-                    },
-                  });
+            //       await this.prismaRepository.media.create({
+            //         data: {
+            //           messageId: msg.id,
+            //           instanceId: this.instanceId,
+            //           type: mediaType,
+            //           fileName: fullName,
+            //           mimetype,
+            //         },
+            //       });
 
-                  const mediaUrl = await s3Service.getObjectUrl(fullName);
+            //       const mediaUrl = await s3Service.getObjectUrl(fullName);
 
-                  messageRaw.message.mediaUrl = mediaUrl;
+            //       messageRaw.message.mediaUrl = mediaUrl;
 
-                  await this.prismaRepository.message.update({
-                    where: { id: msg.id },
-                    data: messageRaw,
-                  });
-                } catch (error) {
-                  this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
-                }
-              }
-            }
+            //       await this.prismaRepository.message.update({
+            //         where: { id: msg.id },
+            //         data: messageRaw,
+            //       });
+            //     } catch (error) {
+            //       this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
+            //     }
+            //   }
+            // }
           }
 
           if (this.localWebhook.enabled) {
@@ -2189,58 +2189,58 @@ export class BaileysStartupService extends ChannelStartupService {
       }
 
       if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
-        const msg = await this.prismaRepository.message.create({
+        await this.prismaRepository.message.create({
           data: messageRaw,
         });
 
-        if (isMedia && this.configService.get<S3>('S3').ENABLE) {
-          try {
-            const message: any = messageRaw;
-            const media = await this.getBase64FromMediaMessage(
-              {
-                message,
-              },
-              true,
-            );
+        // if (isMedia && this.configService.get<S3>('S3').ENABLE) {
+        //   try {
+        //     const message: any = messageRaw;
+        //     const media = await this.getBase64FromMediaMessage(
+        //       {
+        //         message,
+        //       },
+        //       true,
+        //     );
 
-            const { buffer, mediaType, fileName, size } = media;
+        //     const { buffer, mediaType, fileName, size } = media;
 
-            const mimetype = mime.getType(fileName).toString();
+        //     const mimetype = mime.getType(fileName).toString();
 
-            const fullName = join(
-              `${this.instance.id}`,
-              messageRaw.key.remoteJid,
-              `${messageRaw.key.id}`,
-              mediaType,
-              fileName,
-            );
+        //     const fullName = join(
+        //       `${this.instance.id}`,
+        //       messageRaw.key.remoteJid,
+        //       `${messageRaw.key.id}`,
+        //       mediaType,
+        //       fileName,
+        //     );
 
-            await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
-              'Content-Type': mimetype,
-            });
+        //     await s3Service.uploadFile(fullName, buffer, size.fileLength?.low, {
+        //       'Content-Type': mimetype,
+        //     });
 
-            await this.prismaRepository.media.create({
-              data: {
-                messageId: msg.id,
-                instanceId: this.instanceId,
-                type: mediaType,
-                fileName: fullName,
-                mimetype,
-              },
-            });
+        //     await this.prismaRepository.media.create({
+        //       data: {
+        //         messageId: msg.id,
+        //         instanceId: this.instanceId,
+        //         type: mediaType,
+        //         fileName: fullName,
+        //         mimetype,
+        //       },
+        //     });
 
-            const mediaUrl = await s3Service.getObjectUrl(fullName);
+        //     const mediaUrl = await s3Service.getObjectUrl(fullName);
 
-            messageRaw.message.mediaUrl = mediaUrl;
+        //     messageRaw.message.mediaUrl = mediaUrl;
 
-            await this.prismaRepository.message.update({
-              where: { id: msg.id },
-              data: messageRaw,
-            });
-          } catch (error) {
-            this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
-          }
-        }
+        //     await this.prismaRepository.message.update({
+        //       where: { id: msg.id },
+        //       data: messageRaw,
+        //     });
+        //   } catch (error) {
+        //     this.logger.error(['Error on upload file to minio', error?.message, error?.stack]);
+        //   }
+        // }
       }
 
       if (this.localWebhook.enabled) {
