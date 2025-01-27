@@ -2506,6 +2506,7 @@ export class BaileysStartupService extends ChannelStartupService {
     const delayMs = 1000; // 1 seconds
 
     while (attempts < maxAttempts) {
+      console.log('prepareMediaMessage attempts', attempts);
       try {
         const type = mediaMessage.mediatype === 'ptv' ? 'video' : mediaMessage.mediatype;
 
@@ -2818,6 +2819,7 @@ export class BaileysStartupService extends ChannelStartupService {
     const delayMs = 500; // 0.5 seconds
 
     while (attempts < maxAttempts) {
+      console.log('processAudio attempts', attempts);
       try {
         if (process.env.API_AUDIO_CONVERTER) {
           this.logger.verbose('Using audio converter API');
