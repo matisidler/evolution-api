@@ -1785,7 +1785,7 @@ export class BaileysStartupService extends ChannelStartupService {
     try {
       return {
         wuid: jid,
-        status: (await this.client.fetchStatus(jid))?.status,
+        status: (await this.client.fetchStatus(jid))?.[0]?.status,
       };
     } catch (error) {
       return {
