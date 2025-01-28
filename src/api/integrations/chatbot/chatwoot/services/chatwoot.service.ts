@@ -973,6 +973,8 @@ export class ChatwootService {
       data.append('source_id', sourceId);
     }
 
+    console.log('Sending message /messages. Data:', data);
+
     const config = {
       method: 'post',
       maxBodyLength: Infinity,
@@ -1840,11 +1842,10 @@ export class ChatwootService {
     try {
       console.log('eventWhatsapp received, this is the event:');
       console.log(event);
-      console.log('body:');
-      console.log(body);
 
       // Check for audio message URL
       const audioUrl = body?.message?.audioMessage?.url;
+      console.log('this is the audioUrl:', audioUrl);
       if (audioUrl) {
         if (event === 'send.message') {
           console.log('Event is send.message and contains audioUrl');

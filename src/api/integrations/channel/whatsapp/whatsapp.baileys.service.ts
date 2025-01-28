@@ -1373,9 +1373,26 @@ export class BaileysStartupService extends ChannelStartupService {
         })),
       });
 
-      const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
+      const readChatToUpdate: Record<string, true> = {};
 
       for await (const { key, update } of args) {
+        // Add debounce check
+        const messageKey = `${key.id}-${update.status}`;
+        const lastUpdate = this.messageUpdateCache.get(messageKey);
+        const now = Date.now();
+
+        if (lastUpdate && now - lastUpdate < this.MESSAGE_UPDATE_DEBOUNCE_MS) {
+          console.log(`⏳ Debouncing update for message ${key.id} - too soon since last update`);
+          continue;
+        }
+
+        this.messageUpdateCache.set(messageKey, now);
+
+        // Clean up old cache entries after 5 seconds
+        setTimeout(() => {
+          this.messageUpdateCache.delete(messageKey);
+        }, 5000);
+
         console.log('📝 Processing update:', {
           messageId: key.id,
           remoteJid: key.remoteJid,
@@ -4402,4 +4419,8 @@ export class BaileysStartupService extends ChannelStartupService {
 
     return unreadMessages;
   }
+
+  // Add this at the class level
+  private messageUpdateCache = new Map<string, number>();
+  private MESSAGE_UPDATE_DEBOUNCE_MS = 1000; // 1 second debounce
 }
