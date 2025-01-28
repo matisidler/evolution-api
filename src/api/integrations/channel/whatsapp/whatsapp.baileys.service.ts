@@ -1373,6 +1373,8 @@ export class BaileysStartupService extends ChannelStartupService {
         })),
       });
 
+      return;
+
       const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
 
       for await (const { key, update } of args) {
@@ -1472,68 +1474,65 @@ export class BaileysStartupService extends ChannelStartupService {
               timestamp: findMessage.messageTimestamp,
             });
 
-            if (!key.fromMe && key.remoteJid) {
-              readChatToUpdate[key.remoteJid] = true;
+            // if (!key.fromMe && key.remoteJid) {
+            //   readChatToUpdate[key.remoteJid] = true;
 
-              if (status[update.status] === status[4]) {
-                console.log('✅ Updating messages as read:', {
-                  chat: key.remoteJid,
-                  timestamp: findMessage.messageTimestamp,
-                });
-                this.updateMessagesReadedByTimestamp(key.remoteJid, findMessage.messageTimestamp);
-              }
+            //   if (status[update.status] === status[4]) {
+            //     console.log('✅ Updating messages as read:', {
+            //       chat: key.remoteJid,
+            //       timestamp: findMessage.messageTimestamp,
+            //     });
+            //     this.updateMessagesReadedByTimestamp(key.remoteJid, findMessage.messageTimestamp);
+            //   }
+            // }
+
+            await this.prismaRepository.message.update({
+              where: { id: findMessage.id },
+              data: { status: status[update.status] },
+            });
+          }
+
+          const message: any = {
+            messageId: findMessage.id,
+            keyId: key.id,
+            remoteJid: key.remoteJid,
+            fromMe: key.fromMe,
+            participant: key?.remoteJid,
+            status: status[update.status],
+            pollUpdates,
+            instanceId: this.instanceId,
+          };
+
+          console.log('message executed!!!', message);
+
+          this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
+
+          if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
+            await this.prismaRepository.messageUpdate.create({
+              data: message,
+            });
+
+          const existingChat = await this.prismaRepository.chat.findFirst({
+            where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
+          });
+
+          if (existingChat) {
+            const chatToInsert = {
+              remoteJid: message.remoteJid,
+              instanceId: this.instanceId,
+              name: message.pushName || '',
+              unreadMessages: 0,
+            };
+
+            console.log('sendDataWebhook executed!!!');
+
+            this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
+            if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
+              await this.prismaRepository.chat.create({
+                data: chatToInsert,
+              });
             }
-
-            // await this.prismaRepository.message.update({
-            //   where: { id: findMessage.id },
-            //   data: { status: status[update.status] },
-            // });
           }
-
-          // const message: any = {
-          //   messageId: findMessage.id,
-          //   keyId: key.id,
-          //   remoteJid: key.remoteJid,
-          //   fromMe: key.fromMe,
-          //   participant: key?.remoteJid,
-          //   status: status[update.status],
-          //   pollUpdates,
-          //   instanceId: this.instanceId,
-          // };
-
-          // console.log('message executed!!!', message);
-
-          // this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
-
-          if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE) {
-          }
-          // await this.prismaRepository.messageUpdate.create({
-          //   data: message,
-          // });
-
-          // Hasta acá sigue pasando
-
-          // const existingChat = await this.prismaRepository.chat.findFirst({
-          //   where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
-          // });
-
-          // if (existingChat) {
-          //   const chatToInsert = {
-          //     remoteJid: message.remoteJid,
-          //     instanceId: this.instanceId,
-          //     name: message.pushName || '',
-          //     unreadMessages: 0,
-          //   };
-
-          //   console.log('sendDataWebhook executed!!!');
-
-          //   this.sendDataWebhook(Events.CHATS_UPSERT, [chatToInsert]);
-          //   if (this.configService.get<Database>('DATABASE').SAVE_DATA.CHATS) {
-          //     await this.prismaRepository.chat.create({
-          //       data: chatToInsert,
-          //     });
-          //   }
-          // }
         }
       }
 
