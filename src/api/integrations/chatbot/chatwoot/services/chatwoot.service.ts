@@ -1064,77 +1064,89 @@ export class ChatwootService {
   }
 
   public async sendAttachment(waInstance: any, number: string, media: any, caption?: string, options?: Options) {
-    try {
-      const parsedMedia = path.parse(decodeURIComponent(media));
-      let mimeType = mime.getType(parsedMedia?.ext) || '';
-      let fileName = parsedMedia?.name + parsedMedia?.ext;
+    let attempts = 0;
+    const maxAttempts = 100;
+    const delayMs = 500; // 0.5 seconds
 
-      if (!mimeType) {
-        const parts = media.split('/');
-        fileName = decodeURIComponent(parts[parts.length - 1]);
+    while (attempts < maxAttempts) {
+      try {
+        const parsedMedia = path.parse(decodeURIComponent(media));
+        let mimeType = mime.getType(parsedMedia?.ext) || '';
+        let fileName = parsedMedia?.name + parsedMedia?.ext;
 
-        const response = await axios.get(media, {
-          responseType: 'arraybuffer',
-        });
-        mimeType = response.headers['content-type'];
-      }
+        if (!mimeType) {
+          const parts = media.split('/');
+          fileName = decodeURIComponent(parts[parts.length - 1]);
 
-      let type = 'document';
+          const response = await axios.get(media, {
+            responseType: 'arraybuffer',
+          });
+          mimeType = response.headers['content-type'];
+        }
 
-      switch (mimeType.split('/')[0]) {
-        case 'image':
-          type = 'image';
-          break;
-        case 'video':
-          type = 'video';
-          break;
-        case 'audio':
-          type = 'audio';
-          break;
-        default:
+        let type = 'document';
+
+        switch (mimeType.split('/')[0]) {
+          case 'image':
+            type = 'image';
+            break;
+          case 'video':
+            type = 'video';
+            break;
+          case 'audio':
+            type = 'audio';
+            break;
+          default:
+            type = 'document';
+            break;
+        }
+
+        if (type === 'audio') {
+          const data: SendAudioDto = {
+            number: number,
+            audio: media,
+            delay: 1200,
+            quoted: options?.quoted,
+          };
+
+          sendTelemetry('/message/sendWhatsAppAudio');
+
+          const messageSent = await waInstance?.audioWhatsapp(data, true);
+
+          return messageSent;
+        }
+
+        if (type === 'image' && parsedMedia && parsedMedia?.ext === '.gif') {
           type = 'document';
-          break;
-      }
+        }
 
-      if (type === 'audio') {
-        const data: SendAudioDto = {
+        const data: SendMediaDto = {
           number: number,
-          audio: media,
+          mediatype: type as any,
+          fileName: fileName,
+          media: media,
           delay: 1200,
           quoted: options?.quoted,
         };
 
-        sendTelemetry('/message/sendWhatsAppAudio');
+        sendTelemetry('/message/sendMedia');
 
-        const messageSent = await waInstance?.audioWhatsapp(data, true);
+        if (caption) {
+          data.caption = caption;
+        }
+
+        const messageSent = await waInstance?.mediaMessage(data, null, true);
 
         return messageSent;
+      } catch (error) {
+        attempts++;
+        if (attempts === maxAttempts) {
+          this.logger.error(error);
+          throw new Error(`Failed to send attachment after ${maxAttempts} attempts: ${error?.toString() || error}`);
+        }
+        this.logger.warn(`Send attachment attempt ${attempts} failed, retrying in 0.5s...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-
-      if (type === 'image' && parsedMedia && parsedMedia?.ext === '.gif') {
-        type = 'document';
-      }
-
-      const data: SendMediaDto = {
-        number: number,
-        mediatype: type as any,
-        fileName: fileName,
-        media: media,
-        delay: 1200,
-        quoted: options?.quoted,
-      };
-
-      sendTelemetry('/message/sendMedia');
-
-      if (caption) {
-        data.caption = caption;
-      }
-
-      const messageSent = await waInstance?.mediaMessage(data, null, true);
-
-      return messageSent;
-    } catch (error) {
-      this.logger.error(error);
     }
   }
 

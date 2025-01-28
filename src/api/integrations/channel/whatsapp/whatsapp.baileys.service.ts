@@ -2906,50 +2906,66 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
-    const mediaData: SendAudioDto = { ...data };
+    let attempts = 0;
+    const maxAttempts = 100;
+    const delayMs = 500; // 0.5 seconds
 
-    if (file?.buffer) {
-      mediaData.audio = file.buffer.toString('base64');
-    } else if (!isURL(data.audio) && !isBase64(data.audio)) {
-      console.error('Invalid file or audio source');
-      throw new BadRequestException('File buffer, URL, or base64 audio is required');
-    }
+    while (attempts < maxAttempts) {
+      try {
+        const mediaData: SendAudioDto = { ...data };
 
-    if (!data?.encoding && data?.encoding !== false) {
-      data.encoding = true;
-    }
+        if (file?.buffer) {
+          mediaData.audio = file.buffer.toString('base64');
+        } else if (!isURL(data.audio) && !isBase64(data.audio)) {
+          console.error('Invalid file or audio source');
+          throw new BadRequestException('File buffer, URL, or base64 audio is required');
+        }
 
-    if (data?.encoding) {
-      const convert = await this.processAudio(mediaData.audio);
+        if (!data?.encoding && data?.encoding !== false) {
+          data.encoding = true;
+        }
 
-      if (Buffer.isBuffer(convert)) {
-        const result = this.sendMessageWithTyping<AnyMessageContent>(
+        if (data?.encoding) {
+          const convert = await this.processAudio(mediaData.audio);
+
+          if (Buffer.isBuffer(convert)) {
+            const result = this.sendMessageWithTyping<AnyMessageContent>(
+              data.number,
+              {
+                audio: convert,
+                ptt: true,
+                mimetype: 'audio/ogg; codecs=opus',
+              },
+              { presence: 'recording', delay: data?.delay },
+              isIntegration,
+            );
+
+            return result;
+          } else {
+            throw new InternalServerErrorException('Failed to convert audio');
+          }
+        }
+
+        return await this.sendMessageWithTyping<AnyMessageContent>(
           data.number,
           {
-            audio: convert,
+            audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
             ptt: true,
             mimetype: 'audio/ogg; codecs=opus',
           },
           { presence: 'recording', delay: data?.delay },
           isIntegration,
         );
-
-        return result;
-      } else {
-        throw new InternalServerErrorException('Failed to convert audio');
+      } catch (error) {
+        attempts++;
+        if (attempts === maxAttempts) {
+          this.logger.error(error);
+          throw new InternalServerErrorException(error?.toString() || error);
+        }
+        this.logger.warn(`Audio WhatsApp attempt ${attempts} failed, retrying in 0.5s...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
-
-    return await this.sendMessageWithTyping<AnyMessageContent>(
-      data.number,
-      {
-        audio: isURL(data.audio) ? { url: data.audio } : Buffer.from(data.audio, 'base64'),
-        ptt: true,
-        mimetype: 'audio/ogg; codecs=opus',
-      },
-      { presence: 'recording', delay: data?.delay },
-      isIntegration,
-    );
   }
 
   private generateRandomId(length = 11) {
