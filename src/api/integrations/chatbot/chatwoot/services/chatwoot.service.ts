@@ -1851,12 +1851,13 @@ export class ChatwootService {
           // Store send.message events immediately
           this.audioMessageCache.set(audioUrl, { timestamp: Date.now(), event });
           console.log(`Stored audio message with URL: ${audioUrl} for event: ${event}`);
+          console.log('audioMessageCache after set', this.audioMessageCache);
         } else {
           console.log('Event is not send.message and contains audioUrl');
           // For other events, wait and check for duplicates
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const currentTime = Date.now(); // Get current time after delay
-
+          console.log('audioMessageCache before get:', this.audioMessageCache);
           const cachedAudio = this.audioMessageCache.get(audioUrl);
           console.log('CachedAudio found?', cachedAudio);
           if (cachedAudio) {
