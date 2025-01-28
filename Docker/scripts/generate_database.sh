@@ -4,7 +4,7 @@
 
 # if [ "$DOCKER_ENV" != "true" ]; then
 #     export_env_vars
-fi
+# fi
 
 if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ]]; then
     export DATABASE_URL
