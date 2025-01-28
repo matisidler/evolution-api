@@ -1,13 +1,12 @@
 #!/bin/bash
 
-source ./Docker/scripts/env_functions.sh
+# source ./Docker/scripts/env_functions.sh
 
-if [ "$DOCKER_ENV" != "true" ]; then
-    export_env_vars
-fi
+# if [ "$DOCKER_ENV" != "true" ]; then
+#     export_env_vars
+# fi
 
 if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ]]; then
-    export DATABASE_URL
     echo "Generating database for $DATABASE_PROVIDER"
     echo "Database URL: $DATABASE_URL"
     npm run db:generate
