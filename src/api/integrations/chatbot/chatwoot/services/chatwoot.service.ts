@@ -1846,18 +1846,25 @@ export class ChatwootService {
       // Check for audio message URL
       const audioUrl = body?.message?.audioMessage?.url;
       if (audioUrl) {
-        const currentTime = Date.now();
-
         if (event === 'send.message') {
-          // Store send.message events
-          this.audioMessageCache.set(audioUrl, { timestamp: currentTime, event });
+          console.log('Event is send.message and contains audioUrl');
+          // Store send.message events immediately
+          this.audioMessageCache.set(audioUrl, { timestamp: Date.now(), event });
+          console.log(`Stored audio message with URL: ${audioUrl} for event: ${event}`);
         } else {
+          console.log('Event is not send.message and contains audioUrl');
+          // For other events, wait and check for duplicates
           await new Promise((resolve) => setTimeout(resolve, 1000));
+          const currentTime = Date.now(); // Get current time after delay
 
           const cachedAudio = this.audioMessageCache.get(audioUrl);
+          console.log('CachedAudio found?', cachedAudio);
           if (cachedAudio) {
             // Check if we've seen this URL recently (within 10 seconds)
             const timeDiff = currentTime - cachedAudio.timestamp;
+            console.log(
+              `Found cached audio. Time diff: ${timeDiff}ms, Cached event: ${cachedAudio.event}, Current event: ${event}`,
+            );
             if (timeDiff <= 10000 && cachedAudio.event !== event) {
               console.log(`Discarding duplicate audio message with URL: ${audioUrl}`);
               return null;
