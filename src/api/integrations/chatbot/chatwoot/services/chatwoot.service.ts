@@ -942,6 +942,7 @@ export class ChatwootService {
         }
       }
     }
+    return null;
     const data = new FormData();
 
     if (content) {
