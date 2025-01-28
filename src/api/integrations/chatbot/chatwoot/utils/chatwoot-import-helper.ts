@@ -555,6 +555,35 @@ class ChatwootImport {
 
     return pgClient.query(sql, [`WAID:${sourceId}`, messageId]);
   }
+
+  public async hasLastMessageSourceId(
+    conversationId: string | number,
+  ): Promise<{ hasSourceId: boolean; messageId?: number }> {
+    try {
+      const pgClient = postgresClient.getChatwootConnection();
+      const query = `
+        SELECT id, source_id 
+        FROM messages 
+        WHERE conversation_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `;
+
+      const result = await pgClient.query(query, [conversationId]);
+
+      if (result.rows.length === 0) {
+        return { hasSourceId: true }; // No messages found
+      }
+
+      return {
+        hasSourceId: result.rows[0].source_id !== null,
+        messageId: result.rows[0].id,
+      };
+    } catch (error) {
+      this.logger.error(`Error checking last message source_id: ${error.toString()}`);
+      return { hasSourceId: false };
+    }
+  }
 }
 
 export const chatwootImport = new ChatwootImport();

@@ -933,17 +933,69 @@ export class ChatwootService {
     console.log('sendData executed. sourceId:', sourceId, 'isImportHistoryAvailable:', this.isImportHistoryAvailable());
     if (sourceId && this.isImportHistoryAvailable()) {
       const messageAlreadySaved = await chatwootImport.getExistingSourceIds([sourceId]);
-      console.log('messageAlreadySaved:', messageAlreadySaved);
-      if (messageAlreadySaved) {
-        if (messageAlreadySaved.size > 0) {
-          console.log('Message already saved on chatwoot');
-          this.logger.warn('Message already saved on chatwoot');
+      if (messageAlreadySaved && messageAlreadySaved.size > 0) {
+        this.logger.warn('Message already saved on chatwoot');
+        return null;
+      } else {
+        const resp = await chatwootImport.hasLastMessageSourceId(conversationId);
+        if (!resp.hasSourceId) {
+          this.logger.warn('Last message source_id is not null');
+          sourceId = sourceId.replace('WAID:', '');
+          chatwootImport.updateMessageSourceID(resp.messageId, sourceId);
           return null;
         }
       }
     }
 
-    return null;
+    const data = new FormData();
+
+    if (content) {
+      data.append('content', content);
+    }
+
+    data.append('message_type', messageType);
+
+    data.append('attachments[]', fileStream, { filename: fileName });
+
+    const sourceReplyId = quotedMsg?.chatwootMessageId || null;
+
+    if (messageBody && instance) {
+      const replyToIds = await this.getReplyToIds(messageBody, instance);
+
+      if (replyToIds.in_reply_to || replyToIds.in_reply_to_external_id) {
+        const content = JSON.stringify({
+          ...replyToIds,
+        });
+        data.append('content_attributes', content);
+      }
+    }
+
+    if (sourceReplyId) {
+      data.append('source_reply_id', sourceReplyId.toString());
+    }
+
+    if (sourceId) {
+      data.append('source_id', sourceId);
+    }
+
+    const config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: `${this.provider.url}/api/v1/accounts/${this.provider.accountId}/conversations/${conversationId}/messages`,
+      headers: {
+        api_access_token: this.provider.token,
+        ...data.getHeaders(),
+      },
+      data: data,
+    };
+
+    try {
+      const { data } = await axios.request(config);
+
+      return data;
+    } catch (error) {
+      this.logger.error(error);
+    }
   }
 
   public async createBotQr(
@@ -2292,7 +2344,6 @@ export class ChatwootService {
 
   public isImportHistoryAvailable() {
     const uri = this.configService.get<Chatwoot>('CHATWOOT').IMPORT.DATABASE.CONNECTION.URI;
-    console.log('isImportHistoryAvailable uri:', uri);
 
     return uri && uri !== 'postgres://user:password@hostname:port/dbname';
   }
