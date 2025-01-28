@@ -2,8 +2,8 @@
 
 # source ./Docker/scripts/env_functions.sh
 
-if [ "$DOCKER_ENV" != "true" ]; then
-    export_env_vars
+# if [ "$DOCKER_ENV" != "true" ]; then
+#     export_env_vars
 fi
 
 if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ]]; then
