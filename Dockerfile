@@ -1,9 +1,17 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine3.16 AS builder
+
+# Declare build arguments
+ARG DATABASE_PROVIDER
+ARG DATABASE_URL
 
 RUN apk update && \
-    apk add git ffmpeg wget curl bash openssl openssl-dev
+    apk add git ffmpeg wget curl bash
 
-LABEL version="2.2.0" description="Api to control whatsapp features through http requests." 
+# Print environment variables
+RUN echo "DATABASE_PROVIDER: ${DATABASE_PROVIDER}"
+RUN echo "DATABASE_URL: ${DATABASE_URL}"
+
+LABEL version="2.1.1" description="Api to control whatsapp features through http requests." 
 LABEL maintainer="Davidson Gomes" git="https://github.com/DavidsonGomes"
 LABEL contact="contato@atendai.com"
 
@@ -17,7 +25,7 @@ COPY ./src ./src
 COPY ./public ./public
 COPY ./prisma ./prisma
 COPY ./manager ./manager
-# COPY ./.env.example ./.env #uncomment this line if you want to use the example env file
+# COPY ./.env.example ./.env
 COPY ./runWithProvider.js ./
 COPY ./tsup.config.ts ./
 
@@ -29,10 +37,10 @@ RUN ./Docker/scripts/generate_database.sh
 
 RUN npm run build
 
-FROM node:18-alpine AS final
+FROM node:18-alpine3.16 AS final
 
 RUN apk update && \
-    apk add tzdata ffmpeg bash openssl openssl-dev
+    apk add tzdata ffmpeg bash
 
 ENV TZ=America/Sao_Paulo
 
@@ -46,13 +54,10 @@ COPY --from=builder /evolution/dist ./dist
 COPY --from=builder /evolution/prisma ./prisma
 COPY --from=builder /evolution/manager ./manager
 COPY --from=builder /evolution/public ./public
-COPY --from=builder /evolution/.env ./.env
 COPY --from=builder /evolution/Docker ./Docker
 COPY --from=builder /evolution/runWithProvider.js ./runWithProvider.js
 COPY --from=builder /evolution/tsup.config.ts ./tsup.config.ts
 
 ENV DOCKER_ENV=true
 
-EXPOSE 8080
-
-ENTRYPOINT ["/bin/bash", "-c", ". ./Docker/scripts/deploy_database.sh && npm run start:prod" ]
+ENTRYPOINT ["npm", "run", "start:prod"]
