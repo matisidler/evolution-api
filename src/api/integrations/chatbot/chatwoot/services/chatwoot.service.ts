@@ -942,7 +942,7 @@ export class ChatwootService {
         }
       }
     }
-    return null;
+
     const data = new FormData();
 
     if (content) {
@@ -2380,6 +2380,7 @@ export class ChatwootService {
 
   public isImportHistoryAvailable() {
     const uri = this.configService.get<Chatwoot>('CHATWOOT').IMPORT.DATABASE.CONNECTION.URI;
+    console.log('importHistoryDatabaseUri:', uri);
 
     return uri && uri !== 'postgres://user:password@hostname:port/dbname';
   }
