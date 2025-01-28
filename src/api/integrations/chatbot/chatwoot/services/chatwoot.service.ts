@@ -1847,17 +1847,21 @@ export class ChatwootService {
       const audioUrl = body?.message?.audioMessage?.url;
       if (audioUrl) {
         const currentTime = Date.now();
-        const cachedAudio = this.audioMessageCache.get(audioUrl);
 
         if (event === 'send.message') {
           // Store send.message events
           this.audioMessageCache.set(audioUrl, { timestamp: currentTime, event });
-        } else if (cachedAudio) {
-          // Check if we've seen this URL recently (within 10 seconds)
-          const timeDiff = currentTime - cachedAudio.timestamp;
-          if (timeDiff <= 10000 && cachedAudio.event !== event) {
-            console.log(`Discarding duplicate audio message with URL: ${audioUrl}`);
-            return null;
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          const cachedAudio = this.audioMessageCache.get(audioUrl);
+          if (cachedAudio) {
+            // Check if we've seen this URL recently (within 10 seconds)
+            const timeDiff = currentTime - cachedAudio.timestamp;
+            if (timeDiff <= 10000 && cachedAudio.event !== event) {
+              console.log(`Discarding duplicate audio message with URL: ${audioUrl}`);
+              return null;
+            }
           }
         }
       }

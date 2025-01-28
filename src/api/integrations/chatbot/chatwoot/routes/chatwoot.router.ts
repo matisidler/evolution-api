@@ -33,6 +33,7 @@ export class ChatwootRouter extends RouterBroker {
       .post(this.routerPath('webhook'), async (req, res) => {
         // Immediately respond with 200 OK
         res.status(HttpStatus.OK).json({ message: 'Webhook received' });
+        console.log('------- Chatwoot Webhook received -------');
 
         // Process webhook data in the background
         this.dataValidate<InstanceDto>({
