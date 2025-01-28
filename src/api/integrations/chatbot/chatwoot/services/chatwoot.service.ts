@@ -44,6 +44,7 @@ export class ChatwootService {
   private readonly logger = new Logger('ChatwootService');
 
   private provider: any;
+  private audioMessageCache: Map<string, { timestamp: number; event: string }> = new Map();
 
   constructor(
     private readonly waMonitor: WAMonitoringService,
@@ -1841,6 +1842,28 @@ export class ChatwootService {
       console.log(event);
       console.log('body:');
       console.log(body);
+
+      // Check for audio message URL
+      const audioUrl = body?.message?.audioMessage?.url;
+      if (audioUrl) {
+        const currentTime = Date.now();
+        const cachedAudio = this.audioMessageCache.get(audioUrl);
+
+        if (event === 'send.message') {
+          // Store send.message events
+          this.audioMessageCache.set(audioUrl, { timestamp: currentTime, event });
+        } else if (cachedAudio) {
+          // Check if we've seen this URL recently (within 10 seconds)
+          const timeDiff = currentTime - cachedAudio.timestamp;
+          if (timeDiff <= 10000 && cachedAudio.event !== event) {
+            console.log(`Discarding duplicate audio message with URL: ${audioUrl}`);
+            return null;
+          }
+        }
+      }
+
+      console.log('Continuing with the flow!');
+
       const waInstance = this.waMonitor.waInstances[instance.instanceName];
 
       if (!waInstance) {
@@ -1926,6 +1949,7 @@ export class ChatwootService {
           });
 
         const isMedia = this.isMediaMessage(body.message);
+        console.log('isMedia???', isMedia);
 
         const adsMessage = this.getAdsMessage(body);
 

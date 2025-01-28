@@ -1,0 +1,84 @@
+Mandando audio de wpp:
+eventHandler executed! events: {
+
+  "chats.update": [
+
+    {
+
+      "id": "5493534111372@s.whatsapp.net",
+
+      "conversationTimestamp": 1738068254
+
+    }
+
+  ],
+
+  "messages.upsert": {
+
+    "messages": [
+
+      {
+
+        "key": {
+
+          "remoteJid": "5493534111372@s.whatsapp.net",
+
+          "fromMe": true,
+
+          "id": "3AC96E50EB0182FB4A5A"
+
+        },
+
+        "messageTimestamp": 1738068254,
+
+        "pushName": "Matias Sidler",
+
+        "broadcast": false,
+
+        "status": 2,
+
+        "message": {
+
+          "audioMessage": {
+
+            "url": "https://mmg.whatsapp.net/v/t62.7117-24/19917360_618118317240820_4765086335022716327_n.enc?ccb=11-4&oh=01_Q5AaIAIl_P-3d1e4-QQePAreG94zo97YB-YOFgvM3RJ7MAj5&oe=67C04C0E&_nc_sid=5e03e0&mms3=true";,
+
+            "mimetype": "audio/ogg; codecs=opus",
+
+            "fileSha256": "JKH2fGwEhFvsntCZ2ebIaVGjucRIMmqGgo+KhuD+vkQ=",
+
+            "fileLength": "4728",
+
+            "seconds": 2,
+
+            "ptt": true,
+
+            "mediaKey": "hbjGe+6o+6AQRG0d5/zKNBVzXWD6ft7vvWm7gS6e+OY=",
+
+            "fileEncSha256": "+6XGmotc/lap3zOkp93tpjvWR1EG7Hp8dCutiIiZt1U=",
+
+            "directPath": "/v/t62.7117-24/19917360_618118317240820_4765086335022716327_n.enc?ccb=11-4&oh=01_Q5AaIAIl_P-3d1e4-QQePAreG94zo97YB-YOFgvM3RJ7MAj5&oe=67C04C0E&_nc_sid=5e03e0",
+
+            "mediaKeyTimestamp": "1738068251",
+
+            "streamingSidecar": "Bx69toyS3srAZA==",
+
+            "waveform": "AAABAgMEBAQEBAQEBQUFBQQEBAMDAwMDAwQEBQUFBQUEBAQEBAMDAwMDAwMDBAQEBAQDAwMDAwMDAwMDAwMDAw=="
+
+          }
+
+        }
+
+      }
+
+    ],
+
+    "type": "notify"
+
+  }
+
+}
+
+
+
+Mandando audio de chatwoot:
