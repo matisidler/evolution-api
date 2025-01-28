@@ -930,8 +930,10 @@ export class ChatwootService {
     sourceId?: string,
     quotedMsg?: MessageModel,
   ) {
+    console.log('sendData executed. sourceId:', sourceId, 'isImportHistoryAvailable:', this.isImportHistoryAvailable());
     if (sourceId && this.isImportHistoryAvailable()) {
       const messageAlreadySaved = await chatwootImport.getExistingSourceIds([sourceId]);
+      console.log('messageAlreadySaved?', messageAlreadySaved);
       if (messageAlreadySaved) {
         if (messageAlreadySaved.size > 0) {
           this.logger.warn('Message already saved on chatwoot');
@@ -1835,6 +1837,10 @@ export class ChatwootService {
 
   public async eventWhatsapp(event: string, instance: InstanceDto, body: any) {
     try {
+      console.log('eventWhatsapp received, this is the event:');
+      console.log(event);
+      console.log('body:');
+      console.log(body);
       const waInstance = this.waMonitor.waInstances[instance.instanceName];
 
       if (!waInstance) {
