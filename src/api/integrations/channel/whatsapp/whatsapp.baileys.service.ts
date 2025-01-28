@@ -1505,10 +1505,11 @@ export class BaileysStartupService extends ChannelStartupService {
 
           // this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
 
-          if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
-            // await this.prismaRepository.messageUpdate.create({
-            //   data: message,
-            // });
+          if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE) {
+          }
+          // await this.prismaRepository.messageUpdate.create({
+          //   data: message,
+          // });
 
           // Hasta acá sigue pasando
 
