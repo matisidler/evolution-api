@@ -1373,8 +1373,6 @@ export class BaileysStartupService extends ChannelStartupService {
         })),
       });
 
-      return;
-
       const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
 
       for await (const { key, update } of args) {
@@ -1474,17 +1472,17 @@ export class BaileysStartupService extends ChannelStartupService {
               timestamp: findMessage.messageTimestamp,
             });
 
-            // if (!key.fromMe && key.remoteJid) {
-            //   readChatToUpdate[key.remoteJid] = true;
+            if (!key.fromMe && key.remoteJid) {
+              readChatToUpdate[key.remoteJid] = true;
 
-            //   if (status[update.status] === status[4]) {
-            //     console.log('✅ Updating messages as read:', {
-            //       chat: key.remoteJid,
-            //       timestamp: findMessage.messageTimestamp,
-            //     });
-            //     this.updateMessagesReadedByTimestamp(key.remoteJid, findMessage.messageTimestamp);
-            //   }
-            // }
+              if (status[update.status] === status[4]) {
+                console.log('✅ Updating messages as read:', {
+                  chat: key.remoteJid,
+                  timestamp: findMessage.messageTimestamp,
+                });
+                this.updateMessagesReadedByTimestamp(key.remoteJid, findMessage.messageTimestamp);
+              }
+            }
 
             await this.prismaRepository.message.update({
               where: { id: findMessage.id },
