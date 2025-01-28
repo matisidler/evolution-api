@@ -1484,31 +1484,33 @@ export class BaileysStartupService extends ChannelStartupService {
               }
             }
 
-            await this.prismaRepository.message.update({
-              where: { id: findMessage.id },
-              data: { status: status[update.status] },
-            });
+            // await this.prismaRepository.message.update({
+            //   where: { id: findMessage.id },
+            //   data: { status: status[update.status] },
+            // });
           }
 
-          const message: any = {
-            messageId: findMessage.id,
-            keyId: key.id,
-            remoteJid: key.remoteJid,
-            fromMe: key.fromMe,
-            participant: key?.remoteJid,
-            status: status[update.status],
-            pollUpdates,
-            instanceId: this.instanceId,
-          };
+          // const message: any = {
+          //   messageId: findMessage.id,
+          //   keyId: key.id,
+          //   remoteJid: key.remoteJid,
+          //   fromMe: key.fromMe,
+          //   participant: key?.remoteJid,
+          //   status: status[update.status],
+          //   pollUpdates,
+          //   instanceId: this.instanceId,
+          // };
 
-          console.log('message executed!!!', message);
+          // console.log('message executed!!!', message);
 
-          this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
+          // this.sendDataWebhook(Events.MESSAGES_UPDATE, message);
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.MESSAGE_UPDATE)
-            await this.prismaRepository.messageUpdate.create({
-              data: message,
-            });
+            // await this.prismaRepository.messageUpdate.create({
+            //   data: message,
+            // });
+
+          // Hasta acá sigue pasando
 
           // const existingChat = await this.prismaRepository.chat.findFirst({
           //   where: { instanceId: this.instanceId, remoteJid: message.remoteJid },
