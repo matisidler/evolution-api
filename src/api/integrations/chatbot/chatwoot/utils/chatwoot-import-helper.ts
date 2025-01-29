@@ -32,6 +32,10 @@ class ChatwootImport {
   private historyMessages = new Map<string, Message[]>();
   private historyContacts = new Map<string, Contact[]>();
 
+  private get chatSellConfig() {
+    return configService.get('CHATSELL');
+  }
+
   public getRepositoryMessagesCache(instance: InstanceDto) {
     return this.repositoryMessagesCache.has(instance.instanceName)
       ? this.repositoryMessagesCache.get(instance.instanceName)
@@ -207,6 +211,7 @@ class ChatwootImport {
       }
 
       let totalMessagesImported = 0;
+      const messagesToSendToChatSell = [];
 
       let messagesOrdered = this.historyMessages.get(instance.instanceName) || [];
       if (messagesOrdered.length === 0) {
@@ -302,6 +307,11 @@ class ChatwootImport {
 
               sqlInsertMsg += `(${bindContent}, ${bindContent}, $1, $2, ${bindConversationId}, ${bindMessageType}, FALSE, 0,
                   ${bindSenderType},${bindSenderId},${bindSourceId}, to_timestamp(${bindmessageTimestamp}), to_timestamp(${bindmessageTimestamp})),`;
+
+              messagesToSendToChatSell.push({
+                conversation_id: fksChatwoot.conversation_id,
+                account_id: provider.accountId,
+              });
             });
           });
           if (bindInsertMsg.length > 2) {
@@ -323,6 +333,19 @@ class ChatwootImport {
       };
 
       this.importHistoryContacts(instance, providerData);
+      this.logger.info(
+        `importHistoryMessages: Imported ${totalMessagesImported} messages from ${instance.instanceName}`,
+      );
+      if (messagesToSendToChatSell.length > 0) {
+        this.logger.info(`Sending ${messagesToSendToChatSell.length} messages to ChatSell`);
+        try {
+          await this.sendImportedMessagesToChatSell(messagesToSendToChatSell);
+        } catch (error) {
+          this.logger.error(`Error sending messages to ChatSell: ${error.toString()}`);
+        }
+      } else {
+        this.logger.info('No messages to send to ChatSell');
+      }
 
       return totalMessagesImported;
     } catch (error) {
@@ -601,6 +624,33 @@ class ChatwootImport {
     } catch (error) {
       this.logger.error(`Error checking last message source_id: ${error.toString()}`);
       return { hasSourceId: false };
+    }
+  }
+
+  public async sendImportedMessagesToChatSell(data: any) {
+    try {
+      if (!this.chatSellConfig.URL || !this.chatSellConfig.TOKEN) {
+        this.logger.warn('ChatSell configuration is missing URL or TOKEN');
+        return;
+      }
+
+      const response = await fetch(this.chatSellConfig.URL + '/api/chatwoot-imported-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.chatSellConfig.TOKEN}`,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(`ChatSell API error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.logger.error(`Error sending data to ChatSell: ${error.message}`);
+      throw error;
     }
   }
 }

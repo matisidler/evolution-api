@@ -238,6 +238,10 @@ export type Chatwoot = {
     PLACEHOLDER_MEDIA_MESSAGE: boolean;
   };
 };
+export type ChatSell = {
+  URL: string;
+  TOKEN: string;
+};
 export type Openai = { ENABLED: boolean; API_KEY_GLOBAL?: string };
 export type Dify = { ENABLED: boolean };
 
@@ -275,6 +279,7 @@ export interface Env {
   QRCODE: QrCode;
   TYPEBOT: Typebot;
   CHATWOOT: Chatwoot;
+  CHATSELL: ChatSell;
   OPENAI: Openai;
   DIFY: Dify;
   CACHE: CacheConf;
@@ -523,6 +528,10 @@ export class ConfigService {
           },
           PLACEHOLDER_MEDIA_MESSAGE: process.env?.CHATWOOT_IMPORT_PLACEHOLDER_MEDIA_MESSAGE === 'true',
         },
+      },
+      CHATSELL: {
+        URL: process.env?.CHATSELL_URL || '',
+        TOKEN: process.env?.CHATSELL_TOKEN || '',
       },
       OPENAI: {
         ENABLED: process.env?.OPENAI_ENABLED === 'true',
