@@ -4298,10 +4298,17 @@ export class BaileysStartupService extends ChannelStartupService {
       const prepare = (message: any) => this.prepareMessage(message);
       this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
 
-      const task = cron.schedule('*/7 * * * *', async () => {
+      // Run Chatwoot lost messages sync every 7 minutes
+      const chatwootTask = cron.schedule('*/7 * * * *', async () => {
         this.chatwootService.syncLostMessages({ instanceName: this.instance.name }, chatwootConfig, prepare);
       });
-      task.start();
+      chatwootTask.start();
+
+      // Run WhatsApp history sync every 15 minutes
+      const whatsappTask = cron.schedule('*/15 * * * *', async () => {
+        await this.syncWhatsAppHistory();
+      });
+      whatsappTask.start();
     }
   }
 
@@ -4355,5 +4362,41 @@ export class BaileysStartupService extends ChannelStartupService {
     }
 
     return unreadMessages;
+  }
+
+  private async syncWhatsAppHistory() {
+    try {
+      if (!this.configService.get<Chatwoot>('CHATWOOT').ENABLED || !this.localChatwoot?.enabled) {
+        return;
+      }
+
+      // Get the last message we have
+      const lastMessage = await this.prismaRepository.message.findFirst({
+        where: { instanceId: this.instanceId },
+        orderBy: { messageTimestamp: 'desc' },
+      });
+
+      if (!lastMessage) {
+        this.logger.warn('No messages found to use as reference for history sync');
+        return;
+      }
+
+      const key = lastMessage.key as {
+        id: string;
+        remoteJid: string;
+      };
+
+      // Trigger history sync from the last message we have
+      // This will trigger the 'messaging-history.set' event with any messages we don't have
+      await this.client.fetchMessageHistory(
+        50, // Number of messages to fetch per request
+        { id: key.id, remoteJid: key.remoteJid },
+        lastMessage.messageTimestamp as number,
+      );
+
+      this.logger.info('WhatsApp history sync triggered');
+    } catch (error) {
+      this.logger.error(`Error syncing WhatsApp history: ${error.toString()}`);
+    }
   }
 }
