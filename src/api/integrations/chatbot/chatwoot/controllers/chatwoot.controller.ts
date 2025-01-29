@@ -10,6 +10,16 @@ import { BadRequestException } from '@exceptions';
 import { isURL } from 'class-validator';
 
 export class ChatwootController {
+  private audioMessageCache = new Map<
+    string,
+    {
+      messageId: number;
+      sourceId: string;
+      timestamp: number;
+      processed: boolean;
+    }
+  >();
+
   constructor(
     private readonly chatwootService: ChatwootService,
     private readonly configService: ConfigService,
@@ -84,9 +94,105 @@ export class ChatwootController {
   public async receiveWebhook(instance: InstanceDto, data: any) {
     if (!this.configService.get<Chatwoot>('CHATWOOT').ENABLED) throw new BadRequestException('Chatwoot is disabled');
 
+    const attachment = data?.attachments?.[0];
+    console.log('📥 Webhook received:', {
+      hasAttachment: !!attachment,
+      fileType: attachment?.file_type,
+      messageId: attachment?.message_id,
+      sourceId: data?.source_id,
+    });
+
+    if (attachment?.file_type === 'audio') {
+      const messageId = attachment?.message_id;
+      const sourceId = data?.source_id;
+
+      if (messageId) {
+        console.log('🎵 Audio message detected:', { messageId, sourceId });
+
+        const cacheKey = String(messageId);
+
+        // First check: Look for previous message (messageId - 1)
+        const previousMessageKey = String(messageId - 1);
+        const previousMessage = this.audioMessageCache.get(previousMessageKey);
+
+        if (
+          previousMessage &&
+          Date.now() - previousMessage.timestamp <= 10000 && // Within 10 seconds
+          previousMessage.sourceId !== sourceId
+        ) {
+          console.log('⚠️ Sequential duplicate detected:', {
+            currentMessageId: messageId,
+            previousMessageId: previousMessage.messageId,
+            timeDiff: Date.now() - previousMessage.timestamp,
+          });
+          return;
+        }
+
+        // Store the current message
+        this.audioMessageCache.set(cacheKey, {
+          messageId,
+          sourceId,
+          timestamp: Date.now(),
+          processed: false,
+        });
+
+        // Second check: Wait for potential simultaneous duplicates
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const messageInfo = this.audioMessageCache.get(cacheKey);
+        if (messageInfo?.processed) {
+          console.log('🔄 Message already processed:', { messageId });
+          return;
+        }
+
+        this.audioMessageCache.set(cacheKey, {
+          ...messageInfo!,
+          processed: true,
+        });
+
+        // Look for simultaneous duplicates
+        const duplicates = Array.from(this.audioMessageCache.values()).filter(
+          (msg) =>
+            msg.messageId === messageId &&
+            msg.sourceId !== sourceId &&
+            Math.abs(msg.timestamp - messageInfo!.timestamp) <= 1000,
+        );
+
+        if (duplicates.length > 0) {
+          console.log('⚠️ Simultaneous duplicate messages found:', {
+            originalSourceId: sourceId,
+            duplicateSourceIds: duplicates.map((d) => d.sourceId),
+          });
+          return;
+        }
+
+        console.log('✅ Processing audio message:', { messageId, sourceId });
+      }
+    }
+
+    this.cleanupAudioCache();
+
     const chatwootCache = new CacheService(new CacheEngine(this.configService, ChatwootService.name).getEngine());
     const chatwootService = new ChatwootService(waMonitor, this.configService, this.prismaRepository, chatwootCache);
 
     return chatwootService.receiveWebhook(instance, data);
+  }
+
+  private cleanupAudioCache() {
+    const tenSecondsAgo = Date.now() - 10000;
+    const sizeBefore = this.audioMessageCache.size;
+
+    for (const [key, value] of this.audioMessageCache.entries()) {
+      if (value.timestamp < tenSecondsAgo) {
+        this.audioMessageCache.delete(key);
+      }
+    }
+
+    if (sizeBefore !== this.audioMessageCache.size) {
+      console.log('🧹 Cache cleanup:', {
+        entriesRemoved: sizeBefore - this.audioMessageCache.size,
+        remainingEntries: this.audioMessageCache.size,
+      });
+    }
   }
 }
