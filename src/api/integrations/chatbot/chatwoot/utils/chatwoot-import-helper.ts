@@ -212,6 +212,7 @@ class ChatwootImport {
 
       let totalMessagesImported = 0;
       const messagesToSendToChatSell = [];
+      const listOfConversationId = {};
 
       let messagesOrdered = this.historyMessages.get(instance.instanceName) || [];
       if (messagesOrdered.length === 0) {
@@ -308,10 +309,13 @@ class ChatwootImport {
               sqlInsertMsg += `(${bindContent}, ${bindContent}, $1, $2, ${bindConversationId}, ${bindMessageType}, FALSE, 0,
                   ${bindSenderType},${bindSenderId},${bindSourceId}, to_timestamp(${bindmessageTimestamp}), to_timestamp(${bindmessageTimestamp})),`;
 
-              messagesToSendToChatSell.push({
-                conversation_id: fksChatwoot.conversation_id,
-                account_id: provider.accountId,
-              });
+              if (!message.key.fromMe && !listOfConversationId[fksChatwoot.conversation_id]) {
+                messagesToSendToChatSell.push({
+                  conversation_id: fksChatwoot.conversation_id,
+                  account_id: provider.accountId,
+                });
+                listOfConversationId[fksChatwoot.conversation_id] = true;
+              }
             });
           });
           if (bindInsertMsg.length > 2) {
@@ -337,6 +341,16 @@ class ChatwootImport {
         `importHistoryMessages: Imported ${totalMessagesImported} messages from ${instance.instanceName}`,
       );
       if (messagesToSendToChatSell.length > 0) {
+        for (const message of messagesToSendToChatSell) {
+          const displayIdQuery = `
+          SELECT display_id 
+          FROM conversations 
+          WHERE id = $1
+        `;
+          const displayIdResult = await pgClient.query(displayIdQuery, [message.conversation_id]);
+          const displayId = displayIdResult.rows[0]?.display_id;
+          message.conversation_id = displayId;
+        }
         this.logger.info(`Sending ${messagesToSendToChatSell.length} messages to ChatSell`);
         try {
           await this.sendImportedMessagesToChatSell(messagesToSendToChatSell);
