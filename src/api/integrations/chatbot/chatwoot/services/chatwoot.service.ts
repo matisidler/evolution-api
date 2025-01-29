@@ -930,7 +930,14 @@ export class ChatwootService {
     sourceId?: string,
     quotedMsg?: MessageModel,
   ) {
-    console.log('sendData executed. sourceId:', sourceId, 'isImportHistoryAvailable:', this.isImportHistoryAvailable());
+    console.log(
+      'sendData executed. sourceId:',
+      sourceId,
+      'isImportHistoryAvailable:',
+      this.isImportHistoryAvailable(),
+      'conversationId:',
+      conversationId,
+    );
     if (sourceId && this.isImportHistoryAvailable()) {
       const messageAlreadySaved = await chatwootImport.getExistingSourceIds([sourceId]);
       if (messageAlreadySaved && messageAlreadySaved.size > 0) {
@@ -939,10 +946,12 @@ export class ChatwootService {
       } else {
         const resp = await chatwootImport.hasLastMessageSourceId(conversationId);
         if (!resp.hasSourceId) {
-          this.logger.warn('Last message source_id is not null');
+          this.logger.warn('Last message source_id is null: ' + sourceId);
           sourceId = sourceId.replace('WAID:', '');
           chatwootImport.updateMessageSourceID(resp.messageId, sourceId);
           return null;
+        } else {
+          this.logger.warn('Last message source_id is not null: ' + sourceId);
         }
       }
     }
