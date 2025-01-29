@@ -561,7 +561,26 @@ class ChatwootImport {
   ): Promise<{ hasSourceId: boolean; messageId?: number }> {
     try {
       const pgClient = postgresClient.getChatwootConnection();
-      const query = `
+
+      // First get the actual conversation ID from display_id
+      const conversationQuery = `
+        SELECT id 
+        FROM conversations 
+        WHERE display_id = $1 
+        ORDER BY updated_at DESC 
+        LIMIT 1
+      `;
+
+      const conversationResult = await pgClient.query(conversationQuery, [conversationId]);
+
+      if (conversationResult.rows.length === 0) {
+        return { hasSourceId: true }; // No conversation found
+      }
+
+      const actualConversationId = conversationResult.rows[0].id;
+
+      // Then use this ID to query messages
+      const messageQuery = `
         SELECT id, source_id 
         FROM messages 
         WHERE conversation_id = $1 
@@ -569,7 +588,7 @@ class ChatwootImport {
         LIMIT 1
       `;
 
-      const result = await pgClient.query(query, [conversationId]);
+      const result = await pgClient.query(messageQuery, [actualConversationId]);
 
       if (result.rows.length === 0) {
         return { hasSourceId: true }; // No messages found
