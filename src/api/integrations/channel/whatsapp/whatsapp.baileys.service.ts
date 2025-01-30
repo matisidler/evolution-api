@@ -4304,11 +4304,11 @@ export class BaileysStartupService extends ChannelStartupService {
       });
       chatwootTask.start();
 
-      // Run WhatsApp history sync every 15 minutes
-      const whatsappTask = cron.schedule('*/15 * * * *', async () => {
-        await this.syncWhatsAppHistory();
-      });
-      whatsappTask.start();
+      // // Run WhatsApp history sync every 15 minutes
+      // const whatsappTask = cron.schedule('*/15 * * * *', async () => {
+      //   await this.syncWhatsAppHistory();
+      // });
+      // whatsappTask.start();
     }
   }
 
