@@ -543,216 +543,237 @@ export class ChatwootService {
   }
 
   public async createConversation(instance: InstanceDto, body: any) {
-    try {
-      this.logger.verbose('--- Start createConversation ---');
-      this.logger.verbose(`Instance: ${JSON.stringify(instance)}`);
+    const maxRetries = 5;
+    const retryDelay = 1000; // 1 second
 
-      const client = await this.clientCw(instance);
+    const executeWithRetry = async (attempt = 1): Promise<number | null> => {
+      try {
+        this.logger.verbose('--- Start createConversation (Attempt ' + attempt + ') ---');
+        this.logger.verbose(`Instance: ${JSON.stringify(instance)}`);
 
-      if (!client) {
-        this.logger.warn(`Client not found for instance: ${JSON.stringify(instance)}`);
-        return null;
-      }
+        const client = await this.clientCw(instance);
 
-      const cacheKey = `${instance.instanceName}:createConversation-${body.key.remoteJid}`;
-      this.logger.verbose(`Cache key: ${cacheKey}`);
-
-      if (await this.cache.has(cacheKey)) {
-        this.logger.verbose(`Cache hit for key: ${cacheKey}`);
-        const conversationId = (await this.cache.get(cacheKey)) as number;
-        this.logger.verbose(`Cached conversation ID: ${conversationId}`);
-        let conversationExists: conversation | boolean;
-        try {
-          conversationExists = await client.conversations.get({
-            accountId: this.provider.accountId,
-            conversationId: conversationId,
-          });
-          this.logger.verbose(`Conversation exists: ${JSON.stringify(conversationExists)}`);
-        } catch (error) {
-          this.logger.error(`Error getting conversation: ${error}`);
-          conversationExists = false;
-        }
-        if (!conversationExists) {
-          this.logger.verbose('Conversation does not exist, re-calling createConversation');
-          this.cache.delete(cacheKey);
-          return await this.createConversation(instance, body);
+        if (!client) {
+          this.logger.warn(`Client not found for instance: ${JSON.stringify(instance)}`);
+          return null;
         }
 
-        return conversationId;
-      }
+        const cacheKey = `${instance.instanceName}:createConversation-${body.key.remoteJid}`;
+        this.logger.verbose(`Cache key: ${cacheKey}`);
 
-      const isGroup = body.key.remoteJid.includes('@g.us');
-      this.logger.verbose(`Is group: ${isGroup}`);
-
-      const chatId = isGroup ? body.key.remoteJid : body.key.remoteJid.split('@')[0];
-      this.logger.verbose(`Chat ID: ${chatId}`);
-
-      let nameContact: string;
-
-      nameContact = !body.key.fromMe ? body.pushName : chatId;
-      this.logger.verbose(`Name contact: ${nameContact}`);
-
-      const filterInbox = await this.getInbox(instance);
-
-      if (!filterInbox) {
-        this.logger.warn(`Inbox not found for instance: ${JSON.stringify(instance)}`);
-        return null;
-      }
-
-      if (isGroup) {
-        this.logger.verbose('Processing group conversation');
-        const group = await this.waMonitor.waInstances[instance.instanceName].client.groupMetadata(chatId);
-        this.logger.verbose(`Group metadata: ${JSON.stringify(group)}`);
-
-        nameContact = `${group.subject} (GROUP)`;
-
-        const picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(
-          body.key.participant.split('@')[0],
-        );
-        this.logger.verbose(`Participant profile picture URL: ${JSON.stringify(picture_url)}`);
-
-        const findParticipant = await this.findContact(instance, body.key.participant.split('@')[0]);
-        this.logger.verbose(`Found participant: ${JSON.stringify(findParticipant)}`);
-
-        if (findParticipant) {
-          if (!findParticipant.name || findParticipant.name === chatId) {
-            await this.updateContact(instance, findParticipant.id, {
-              name: body.pushName,
-              avatar_url: picture_url.profilePictureUrl || null,
+        if (await this.cache.has(cacheKey)) {
+          this.logger.verbose(`Cache hit for key: ${cacheKey}`);
+          const conversationId = (await this.cache.get(cacheKey)) as number;
+          this.logger.verbose(`Cached conversation ID: ${conversationId}`);
+          let conversationExists: conversation | boolean;
+          try {
+            conversationExists = await client.conversations.get({
+              accountId: this.provider.accountId,
+              conversationId: conversationId,
             });
+            this.logger.verbose(`Conversation exists: ${JSON.stringify(conversationExists)}`);
+          } catch (error) {
+            this.logger.error(`Error getting conversation: ${error}`);
+            conversationExists = false;
           }
-        } else {
-          await this.createContact(
-            instance,
+          if (!conversationExists) {
+            this.logger.verbose('Conversation does not exist, re-calling createConversation');
+            this.cache.delete(cacheKey);
+            return await this.createConversation(instance, body);
+          }
+
+          return conversationId;
+        }
+
+        const isGroup = body.key.remoteJid.includes('@g.us');
+        this.logger.verbose(`Is group: ${isGroup}`);
+
+        const chatId = isGroup ? body.key.remoteJid : body.key.remoteJid.split('@')[0];
+        this.logger.verbose(`Chat ID: ${chatId}`);
+
+        let nameContact: string;
+
+        nameContact = !body.key.fromMe ? body.pushName : chatId;
+        this.logger.verbose(`Name contact: ${nameContact}`);
+
+        const filterInbox = await this.getInbox(instance);
+
+        if (!filterInbox) {
+          this.logger.warn(`Inbox not found for instance: ${JSON.stringify(instance)}`);
+          return null;
+        }
+
+        if (isGroup) {
+          this.logger.verbose('Processing group conversation');
+          const group = await this.waMonitor.waInstances[instance.instanceName].client.groupMetadata(chatId);
+          this.logger.verbose(`Group metadata: ${JSON.stringify(group)}`);
+
+          nameContact = `${group.subject} (GROUP)`;
+
+          const picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(
             body.key.participant.split('@')[0],
-            filterInbox.id,
-            false,
-            body.pushName,
-            picture_url.profilePictureUrl || null,
-            body.key.participant,
           );
-        }
-      }
+          this.logger.verbose(`Participant profile picture URL: ${JSON.stringify(picture_url)}`);
 
-      const picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(chatId);
-      this.logger.verbose(`Contact profile picture URL: ${JSON.stringify(picture_url)}`);
+          const findParticipant = await this.findContact(instance, body.key.participant.split('@')[0]);
+          this.logger.verbose(`Found participant: ${JSON.stringify(findParticipant)}`);
 
-      let contact = await this.findContact(instance, chatId);
-      this.logger.verbose(`Found contact: ${JSON.stringify(contact)}`);
-
-      if (contact) {
-        if (!body.key.fromMe) {
-          const waProfilePictureFile =
-            picture_url?.profilePictureUrl?.split('#')[0].split('?')[0].split('/').pop() || '';
-          const chatwootProfilePictureFile = contact?.thumbnail?.split('#')[0].split('?')[0].split('/').pop() || '';
-          const pictureNeedsUpdate = waProfilePictureFile !== chatwootProfilePictureFile;
-          const nameNeedsUpdate =
-            !contact.name ||
-            contact.name === chatId ||
-            (`+${chatId}`.startsWith('+55')
-              ? this.getNumbers(`+${chatId}`).some(
-                  (v) => contact.name === v || contact.name === v.substring(3) || contact.name === v.substring(1),
-                )
-              : false);
-
-          this.logger.verbose(`Picture needs update: ${pictureNeedsUpdate}`);
-          this.logger.verbose(`Name needs update: ${nameNeedsUpdate}`);
-
-          if (pictureNeedsUpdate || nameNeedsUpdate) {
-            contact = await this.updateContact(instance, contact.id, {
-              ...(nameNeedsUpdate && { name: nameContact }),
-              ...(waProfilePictureFile === '' && { avatar: null }),
-              ...(pictureNeedsUpdate && { avatar_url: picture_url?.profilePictureUrl }),
-            });
+          if (findParticipant) {
+            if (!findParticipant.name || findParticipant.name === chatId) {
+              await this.updateContact(instance, findParticipant.id, {
+                name: body.pushName,
+                avatar_url: picture_url.profilePictureUrl || null,
+              });
+            }
+          } else {
+            await this.createContact(
+              instance,
+              body.key.participant.split('@')[0],
+              filterInbox.id,
+              false,
+              body.pushName,
+              picture_url.profilePictureUrl || null,
+              body.key.participant,
+            );
           }
         }
-      } else {
-        const jid = body.key.remoteJid;
-        contact = await this.createContact(
-          instance,
-          chatId,
-          filterInbox.id,
-          isGroup,
-          nameContact,
-          picture_url.profilePictureUrl || null,
-          jid,
-        );
-      }
 
-      if (!contact) {
-        this.logger.warn('Contact not created or found');
-        return null;
-      }
+        const picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(chatId);
+        this.logger.verbose(`Contact profile picture URL: ${JSON.stringify(picture_url)}`);
 
-      const contactId = contact?.payload?.id || contact?.payload?.contact?.id || contact?.id;
-      this.logger.verbose(`Contact ID: ${contactId}`);
+        let contact = await this.findContact(instance, chatId);
+        this.logger.verbose(`Found contact: ${JSON.stringify(contact)}`);
 
-      const contactConversations = (await client.contacts.listConversations({
-        accountId: this.provider.accountId,
-        id: contactId,
-      })) as any;
-      this.logger.verbose(`Contact conversations: ${JSON.stringify(contactConversations)}`);
+        if (contact) {
+          if (!body.key.fromMe) {
+            const waProfilePictureFile =
+              picture_url?.profilePictureUrl?.split('#')[0].split('?')[0].split('/').pop() || '';
+            const chatwootProfilePictureFile = contact?.thumbnail?.split('#')[0].split('?')[0].split('/').pop() || '';
+            const pictureNeedsUpdate = waProfilePictureFile !== chatwootProfilePictureFile;
+            const nameNeedsUpdate =
+              !contact.name ||
+              contact.name === chatId ||
+              (`+${chatId}`.startsWith('+55')
+                ? this.getNumbers(`+${chatId}`).some(
+                    (v) => contact.name === v || contact.name === v.substring(3) || contact.name === v.substring(1),
+                  )
+                : false);
 
-      if (!contactConversations || !contactConversations.payload) {
-        this.logger.error('No conversations found or payload is undefined');
-        return null;
-      }
+            this.logger.verbose(`Picture needs update: ${pictureNeedsUpdate}`);
+            this.logger.verbose(`Name needs update: ${nameNeedsUpdate}`);
 
-      if (contactConversations.payload.length) {
-        let conversation: any;
-        if (this.provider.reopenConversation) {
-          conversation = contactConversations.payload.find((conversation) => conversation.inbox_id == filterInbox.id);
-          this.logger.verbose(`Found conversation in reopenConversation mode: ${JSON.stringify(conversation)}`);
-
-          if (this.provider.conversationPending) {
-            if (conversation) {
-              await client.conversations.toggleStatus({
-                accountId: this.provider.accountId,
-                conversationId: conversation.id,
-                data: {
-                  status: 'pending',
-                },
+            if (pictureNeedsUpdate || nameNeedsUpdate) {
+              contact = await this.updateContact(instance, contact.id, {
+                ...(nameNeedsUpdate && { name: nameContact }),
+                ...(waProfilePictureFile === '' && { avatar: null }),
+                ...(pictureNeedsUpdate && { avatar_url: picture_url?.profilePictureUrl }),
               });
             }
           }
         } else {
-          conversation = contactConversations.payload.find(
-            (conversation) => conversation.status !== 'resolved' && conversation.inbox_id == filterInbox.id,
+          const jid = body.key.remoteJid;
+          contact = await this.createContact(
+            instance,
+            chatId,
+            filterInbox.id,
+            isGroup,
+            nameContact,
+            picture_url.profilePictureUrl || null,
+            jid,
           );
-          this.logger.verbose(`Found conversation: ${JSON.stringify(conversation)}`);
         }
 
-        if (conversation) {
-          this.logger.verbose(`Returning existing conversation ID: ${conversation.id}`);
-          this.cache.set(cacheKey, conversation.id);
-          return conversation.id;
+        if (!contact) {
+          this.logger.warn('Contact not created or found');
+          return null;
         }
+
+        const contactId = contact?.payload?.id || contact?.payload?.contact?.id || contact?.id;
+        this.logger.verbose(`Contact ID: ${contactId}`);
+
+        const contactConversations = (await client.contacts.listConversations({
+          accountId: this.provider.accountId,
+          id: contactId,
+        })) as any;
+        this.logger.verbose(`Contact conversations: ${JSON.stringify(contactConversations)}`);
+
+        if (!contactConversations || !contactConversations.payload) {
+          this.logger.error('No conversations found or payload is undefined');
+          return null;
+        }
+
+        if (contactConversations.payload.length) {
+          let conversation: any;
+          if (this.provider.reopenConversation) {
+            conversation = contactConversations.payload.find((conversation) => conversation.inbox_id == filterInbox.id);
+            this.logger.verbose(`Found conversation in reopenConversation mode: ${JSON.stringify(conversation)}`);
+
+            if (this.provider.conversationPending) {
+              if (conversation) {
+                await client.conversations.toggleStatus({
+                  accountId: this.provider.accountId,
+                  conversationId: conversation.id,
+                  data: {
+                    status: 'pending',
+                  },
+                });
+              }
+            }
+          } else {
+            conversation = contactConversations.payload.find(
+              (conversation) => conversation.status !== 'resolved' && conversation.inbox_id == filterInbox.id,
+            );
+            this.logger.verbose(`Found conversation: ${JSON.stringify(conversation)}`);
+          }
+
+          if (conversation) {
+            this.logger.verbose(`Returning existing conversation ID: ${conversation.id}`);
+            this.cache.set(cacheKey, conversation.id);
+            return conversation.id;
+          }
+        }
+
+        const data = {
+          contact_id: contactId.toString(),
+          inbox_id: filterInbox.id.toString(),
+        };
+
+        if (this.provider.conversationPending) {
+          data['status'] = 'pending';
+        }
+
+        const conversation = await client.conversations.create({
+          accountId: this.provider.accountId,
+          data,
+        });
+
+        if (!conversation) {
+          this.logger.warn('Conversation not created or found');
+          return null;
+        }
+
+        this.logger.verbose(`New conversation created with ID: ${conversation.id}`);
+        this.cache.set(cacheKey, conversation.id);
+        return conversation.id;
+      } catch (error) {
+        this.logger.error(`Error in createConversation attempt ${attempt}: ${error}`);
+
+        if (attempt < maxRetries) {
+          this.logger.verbose(`Retrying in ${retryDelay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          return executeWithRetry(attempt + 1);
+        }
+
+        this.logger.error(`Failed after ${maxRetries} attempts`);
+        throw error;
       }
+    };
 
-      const data = {
-        contact_id: contactId.toString(),
-        inbox_id: filterInbox.id.toString(),
-      };
-
-      if (this.provider.conversationPending) {
-        data['status'] = 'pending';
-      }
-
-      const conversation = await client.conversations.create({
-        accountId: this.provider.accountId,
-        data,
-      });
-
-      if (!conversation) {
-        this.logger.warn('Conversation not created or found');
-        return null;
-      }
-
-      this.logger.verbose(`New conversation created with ID: ${conversation.id}`);
-      this.cache.set(cacheKey, conversation.id);
-      return conversation.id;
+    try {
+      return await executeWithRetry();
     } catch (error) {
-      this.logger.error(`Error in createConversation: ${error}`);
+      this.logger.error(`Final error in createConversation: ${error}`);
+      return null;
     }
   }
 
