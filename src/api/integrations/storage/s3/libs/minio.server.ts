@@ -17,7 +17,7 @@ const minioClient = (() => {
   if (BUCKET?.ENABLE) {
     return new MinIo.Client({
       endPoint: BUCKET.ENDPOINT,
-      port: BUCKET.PORT,
+      // port: BUCKET.PORT,
       useSSL: BUCKET.USE_SSL,
       accessKey: BUCKET.ACCESS_KEY,
       secretKey: BUCKET.SECRET_KEY,
