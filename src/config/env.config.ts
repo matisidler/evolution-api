@@ -559,8 +559,8 @@ export class ConfigService {
         ENDPOINT: process.env?.S3_ENDPOINT,
         BUCKET_NAME: process.env?.S3_BUCKET,
         ENABLE: process.env?.S3_ENABLED === 'true',
-        PORT: Number.parseInt(process.env?.S3_PORT || '9000'),
-        USE_SSL: process.env?.S3_USE_SSL === 'true',
+        PORT: Number.parseInt(process.env?.S3_PORT || '433'),
+        USE_SSL: process.env?.S3_USE_SSL === 'true' || true,
         REGION: process.env?.S3_REGION,
       },
       AUTHENTICATION: {

@@ -4315,29 +4315,55 @@ export class BaileysStartupService extends ChannelStartupService {
   private async updateMessagesReadedByTimestamp(remoteJid: string, timestamp?: number): Promise<number> {
     if (timestamp === undefined || timestamp === null) return 0;
 
-    const result = await this.prismaRepository.message.updateMany({
-      where: {
-        AND: [
-          { key: { path: ['remoteJid'], equals: remoteJid } },
-          { key: { path: ['fromMe'], equals: false } },
-          { messageTimestamp: { lte: timestamp } },
-          {
-            OR: [{ status: null }, { status: status[3] }],
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
+
+    while (attempt < maxRetries) {
+      try {
+        const result = await this.prismaRepository.message.updateMany({
+          where: {
+            AND: [
+              { key: { path: ['remoteJid'], equals: remoteJid } },
+              { key: { path: ['fromMe'], equals: false } },
+              { messageTimestamp: { lte: timestamp } },
+              {
+                OR: [{ status: null }, { status: status[3] }],
+              },
+            ],
           },
-        ],
-      },
-      data: { status: status[4] },
-    });
+          data: { status: status[4] },
+        });
 
-    if (result) {
-      if (result.count > 0) {
-        this.updateChatUnreadMessages(remoteJid);
+        if (result) {
+          if (result.count > 0) {
+            await this.updateChatUnreadMessages(remoteJid);
+          }
+          return result.count;
+        }
+        return 0;
+      } catch (error) {
+        lastError = error;
+        attempt++;
+
+        // If it's not a deadlock error, don't retry
+        if (!error?.message?.includes('deadlock detected')) {
+          throw error;
+        }
+
+        if (attempt < maxRetries) {
+          // Exponential backoff: 100ms, 200ms, 400ms
+          const delay = Math.pow(2, attempt - 1) * 100;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          this.logger.warn(
+            `Retrying updateMessagesReadedByTimestamp after deadlock (attempt ${attempt}/${maxRetries})`,
+          );
+        }
       }
-
-      return result.count;
     }
 
-    return 0;
+    // If we've exhausted all retries, throw the last error
+    throw lastError;
   }
 
   private async updateChatUnreadMessages(remoteJid: string): Promise<number> {
