@@ -28,7 +28,7 @@ import dayjs from 'dayjs';
 import FormData from 'form-data';
 import Jimp from 'jimp';
 import Long from 'long';
-import mime from 'mime';
+import mimeTypes from 'mime-types';
 import path from 'path';
 import { Readable } from 'stream';
 
@@ -548,7 +548,7 @@ export class ChatwootService {
 
     const executeWithRetry = async (attempt = 1): Promise<number | null> => {
       try {
-        this.logger.verbose('--- Start createConversation (Attempt ' + attempt + ') ---');
+        this.logger.verbose('--- Start createConversation ---');
         this.logger.verbose(`Instance: ${JSON.stringify(instance)}`);
 
         const client = await this.clientCw(instance);
@@ -708,7 +708,7 @@ export class ChatwootService {
             conversation = contactConversations.payload.find((conversation) => conversation.inbox_id == filterInbox.id);
             this.logger.verbose(`Found conversation in reopenConversation mode: ${JSON.stringify(conversation)}`);
 
-            if (this.provider.conversationPending) {
+            if (this.provider.conversationPending && conversation.status !== 'open') {
               if (conversation) {
                 await client.conversations.toggleStatus({
                   accountId: this.provider.accountId,
@@ -1108,7 +1108,7 @@ export class ChatwootService {
     const executeWithRetry = async (attempt = 1): Promise<any> => {
       try {
         const parsedMedia = path.parse(decodeURIComponent(media));
-        let mimeType = mime.getType(parsedMedia?.ext) || '';
+        let mimeType = mimeTypes.lookup(parsedMedia?.ext) || '';
         let fileName = parsedMedia?.name + parsedMedia?.ext;
 
         if (!mimeType) {
@@ -2013,7 +2013,7 @@ export class ChatwootService {
           }
 
           if (!nameFile) {
-            nameFile = `${Math.random().toString(36).substring(7)}.${mime.getExtension(downloadBase64.mimetype) || ''}`;
+            nameFile = `${Math.random().toString(36).substring(7)}.${mimeTypes.extension(downloadBase64.mimetype) || ''}`;
           }
 
           const fileData = Buffer.from(downloadBase64.base64, 'base64');
@@ -2025,11 +2025,21 @@ export class ChatwootService {
 
           if (body.key.remoteJid.includes('@g.us')) {
             const participantName = body.pushName;
+            const rawPhoneNumber = body.key.participant.split('@')[0];
+            const phoneMatch = rawPhoneNumber.match(/^(\d{2})(\d{2})(\d{4})(\d{4})$/);
+
+            let formattedPhoneNumber: string;
+
+            if (phoneMatch) {
+              formattedPhoneNumber = `+${phoneMatch[1]} (${phoneMatch[2]}) ${phoneMatch[3]}-${phoneMatch[4]}`;
+            } else {
+              formattedPhoneNumber = `+${rawPhoneNumber}`;
+            }
 
             let content: string;
 
             if (!body.key.fromMe) {
-              content = `**${participantName}:**\n\n${bodyMessage}`;
+              content = `**${formattedPhoneNumber} - ${participantName}:**\n\n${bodyMessage}`;
             } else {
               content = `${bodyMessage}`;
             }
@@ -2102,8 +2112,8 @@ export class ChatwootService {
         if (isAdsMessage) {
           const imgBuffer = await axios.get(adsMessage.thumbnailUrl, { responseType: 'arraybuffer' });
 
-          const extension = mime.getExtension(imgBuffer.headers['content-type']);
-          const mimeType = extension && mime.getType(extension);
+          const extension = mimeTypes.extension(imgBuffer.headers['content-type']);
+          const mimeType = extension && mimeTypes.lookup(extension);
 
           if (!mimeType) {
             this.logger.warn('mimetype of Ads message not found');
@@ -2111,7 +2121,7 @@ export class ChatwootService {
           }
 
           const random = Math.random().toString(36).substring(7);
-          const nameFile = `${random}.${mime.getExtension(mimeType)}`;
+          const nameFile = `${random}.${mimeTypes.extension(mimeType)}`;
           const fileData = Buffer.from(imgBuffer.data, 'binary');
 
           const img = await Jimp.read(fileData);
@@ -2154,11 +2164,21 @@ export class ChatwootService {
 
         if (body.key.remoteJid.includes('@g.us')) {
           const participantName = body.pushName;
+          const rawPhoneNumber = body.key.participant.split('@')[0];
+          const phoneMatch = rawPhoneNumber.match(/^(\d{2})(\d{2})(\d{4})(\d{4})$/);
+
+          let formattedPhoneNumber: string;
+
+          if (phoneMatch) {
+            formattedPhoneNumber = `+${phoneMatch[1]} (${phoneMatch[2]}) ${phoneMatch[3]}-${phoneMatch[4]}`;
+          } else {
+            formattedPhoneNumber = `+${rawPhoneNumber}`;
+          }
 
           let content: string;
 
           if (!body.key.fromMe) {
-            content = `**${participantName}**\n\n${bodyMessage}`;
+            content = `**${formattedPhoneNumber} - ${participantName}:**\n\n${bodyMessage}`;
           } else {
             content = `${bodyMessage}`;
           }

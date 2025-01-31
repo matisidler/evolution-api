@@ -94,13 +94,13 @@ ARG DATABASE_CONNECTION_CLIENT_NAME
 ARG CHATSELL_URL
 ARG CHATSELL_TOKEN
 RUN apk update && \
-    apk add git ffmpeg wget curl bash
+    apk add git ffmpeg wget curl bash openssl
 
 # Print environment variables
 RUN echo "DATABASE_PROVIDER: ${DATABASE_PROVIDER}"
 RUN echo "DATABASE_URL: ${DATABASE_URL}"
 
-LABEL version="2.1.1" description="Api to control whatsapp features through http requests." 
+LABEL version="2.2.2" description="Api to control whatsapp features through http requests." 
 LABEL maintainer="Davidson Gomes" git="https://github.com/DavidsonGomes"
 LABEL contact="contato@atendai.com"
 
@@ -108,7 +108,7 @@ WORKDIR /evolution
 
 COPY ./package.json ./tsconfig.json ./
 
-RUN npm install -f
+RUN npm install
 
 COPY ./src ./src
 COPY ./public ./public
@@ -129,7 +129,7 @@ RUN npm run build
 FROM node:18-alpine3.16 AS final
 
 RUN apk update && \
-    apk add tzdata ffmpeg bash
+    apk add tzdata ffmpeg bash openssl
 
 ENV TZ=America/Sao_Paulo
 
