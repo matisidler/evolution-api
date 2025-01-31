@@ -1872,8 +1872,24 @@ export class BaileysStartupService extends ChannelStartupService {
     quoted: any,
     messageId?: string,
     ephemeralExpiration?: number,
-    // participants?: GroupParticipant[],
   ) {
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    const executeWithRetry = async (fn: () => Promise<any>) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          return await fn();
+        } catch (error: any) {
+          if (error?.message === 'Timed Out' && attempt < maxRetries) {
+            await delay(retryDelay * attempt);
+            continue;
+          }
+          throw error;
+        }
+      }
+    };
+
     sender = sender.toLowerCase();
 
     const option: any = {
@@ -1882,10 +1898,6 @@ export class BaileysStartupService extends ChannelStartupService {
 
     if (isJidGroup(sender)) {
       option.useCachedGroupMetadata = true;
-      // if (participants)
-      //   option.cachedGroupMetadata = async () => {
-      //     return { participants: participants as GroupParticipant[] };
-      //   };
     }
 
     if (ephemeralExpiration) option.ephemeralExpiration = ephemeralExpiration;
@@ -1894,25 +1906,27 @@ export class BaileysStartupService extends ChannelStartupService {
     else option.messageId = '3EB0' + randomBytes(18).toString('hex').toUpperCase();
 
     if (message['viewOnceMessage']) {
-      const m = generateWAMessageFromContent(sender, message, {
-        timestamp: new Date(),
-        userJid: this.instance.wuid,
-        messageId,
-        quoted,
-      });
-      const id = await this.client.relayMessage(sender, message, { messageId });
-      m.key = {
-        id: id,
-        remoteJid: sender,
-        participant: isJidUser(sender) ? sender : undefined,
-        fromMe: true,
-      };
-      for (const [key, value] of Object.entries(m)) {
-        if (!value || (isArray(value) && value.length) === 0) {
-          delete m[key];
+      return await executeWithRetry(async () => {
+        const m = generateWAMessageFromContent(sender, message, {
+          timestamp: new Date(),
+          userJid: this.instance.wuid,
+          messageId,
+          quoted,
+        });
+        const id = await this.client.relayMessage(sender, message, { messageId });
+        m.key = {
+          id: id,
+          remoteJid: sender,
+          participant: isJidUser(sender) ? sender : undefined,
+          fromMe: true,
+        };
+        for (const [key, value] of Object.entries(m)) {
+          if (!value || (isArray(value) && value.length) === 0) {
+            delete m[key];
+          }
         }
-      }
-      return m;
+        return m;
+      });
     }
 
     if (
@@ -1923,42 +1937,48 @@ export class BaileysStartupService extends ChannelStartupService {
       sender !== 'status@broadcast'
     ) {
       if (message['reactionMessage']) {
-        return await this.client.sendMessage(
-          sender,
-          {
-            react: {
-              text: message['reactionMessage']['text'],
-              key: message['reactionMessage']['key'],
-            },
-          } as unknown as AnyMessageContent,
-          option as unknown as MiscMessageGenerationOptions,
+        return await executeWithRetry(() =>
+          this.client.sendMessage(
+            sender,
+            {
+              react: {
+                text: message['reactionMessage']['text'],
+                key: message['reactionMessage']['key'],
+              },
+            } as unknown as AnyMessageContent,
+            option as unknown as MiscMessageGenerationOptions,
+          ),
         );
       }
     }
 
     if (message['conversation']) {
-      return await this.client.sendMessage(
-        sender,
-        {
-          text: message['conversation'],
-          mentions,
-          linkPreview: linkPreview,
-        } as unknown as AnyMessageContent,
-        option as unknown as MiscMessageGenerationOptions,
+      return await executeWithRetry(() =>
+        this.client.sendMessage(
+          sender,
+          {
+            text: message['conversation'],
+            mentions,
+            linkPreview: linkPreview,
+          } as unknown as AnyMessageContent,
+          option as unknown as MiscMessageGenerationOptions,
+        ),
       );
     }
 
     if (!message['audio'] && !message['poll'] && !message['sticker'] && sender != 'status@broadcast') {
-      return await this.client.sendMessage(
-        sender,
-        {
-          forward: {
-            key: { remoteJid: this.instance.wuid, fromMe: true },
-            message,
+      return await executeWithRetry(() =>
+        this.client.sendMessage(
+          sender,
+          {
+            forward: {
+              key: { remoteJid: this.instance.wuid, fromMe: true },
+              message,
+            },
+            mentions,
           },
-          mentions,
-        },
-        option as unknown as MiscMessageGenerationOptions,
+          option as unknown as MiscMessageGenerationOptions,
+        ),
       );
     }
 
@@ -1994,14 +2014,16 @@ export class BaileysStartupService extends ChannelStartupService {
       const firstBatch = batches.shift();
 
       if (firstBatch) {
-        firstMessage = await this.client.sendMessage(
-          sender,
-          message['status'].content as unknown as AnyMessageContent,
-          {
-            backgroundColor: message['status'].option.backgroundColor,
-            font: message['status'].option.font,
-            statusJidList: firstBatch,
-          } as unknown as MiscMessageGenerationOptions,
+        firstMessage = await executeWithRetry(() =>
+          this.client.sendMessage(
+            sender,
+            message['status'].content as unknown as AnyMessageContent,
+            {
+              backgroundColor: message['status'].option.backgroundColor,
+              font: message['status'].option.font,
+              statusJidList: firstBatch,
+            } as unknown as MiscMessageGenerationOptions,
+          ),
         );
 
         msgId = firstMessage.key.id;
@@ -2011,28 +2033,30 @@ export class BaileysStartupService extends ChannelStartupService {
 
       await Promise.allSettled(
         batches.map(async (batch) => {
-          const messageSent = await this.client.sendMessage(
-            sender,
-            message['status'].content as unknown as AnyMessageContent,
-            {
-              backgroundColor: message['status'].option.backgroundColor,
-              font: message['status'].option.font,
-              statusJidList: batch,
-              messageId: msgId,
-            } as unknown as MiscMessageGenerationOptions,
+          return await executeWithRetry(() =>
+            this.client.sendMessage(
+              sender,
+              message['status'].content as unknown as AnyMessageContent,
+              {
+                backgroundColor: message['status'].option.backgroundColor,
+                font: message['status'].option.font,
+                statusJidList: batch,
+                messageId: msgId,
+              } as unknown as MiscMessageGenerationOptions,
+            ),
           );
-
-          return messageSent;
         }),
       );
 
       return firstMessage;
     }
 
-    return await this.client.sendMessage(
-      sender,
-      message as unknown as AnyMessageContent,
-      option as unknown as MiscMessageGenerationOptions,
+    return await executeWithRetry(() =>
+      this.client.sendMessage(
+        sender,
+        message as unknown as AnyMessageContent,
+        option as unknown as MiscMessageGenerationOptions,
+      ),
     );
   }
 
@@ -2502,7 +2526,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
   private async prepareMediaMessage(mediaMessage: MediaMessage) {
     const maxRetries = 10;
-    const retryDelay = 500; // milliseconds
+    const retryDelay = 1000; // milliseconds
 
     const executeWithRetry = async (attempt = 1): Promise<any> => {
       try {
@@ -2750,142 +2774,164 @@ export class BaileysStartupService extends ChannelStartupService {
   public async processAudioMp4(audio: string) {
     let inputStream: PassThrough;
 
-    if (isURL(audio)) {
-      const response = await axios.get(audio, { responseType: 'stream' });
-      inputStream = response.data;
-    } else {
-      const audioBuffer = Buffer.from(audio, 'base64');
-      inputStream = new PassThrough();
-      inputStream.end(audioBuffer);
-    }
-
-    return new Promise<Buffer>((resolve, reject) => {
-      const ffmpegProcess = spawn(ffmpegPath.path, [
-        '-i',
-        'pipe:0',
-        '-vn',
-        '-ab',
-        '128k',
-        '-ar',
-        '44100',
-        '-f',
-        'mp4',
-        '-movflags',
-        'frag_keyframe+empty_moov',
-        'pipe:1',
-      ]);
-
-      const outputChunks: Buffer[] = [];
-      let stderrData = '';
-
-      ffmpegProcess.stdout.on('data', (chunk) => {
-        outputChunks.push(chunk);
-      });
-
-      ffmpegProcess.stderr.on('data', (data) => {
-        stderrData += data.toString();
-        this.logger.verbose(`ffmpeg stderr: ${data}`);
-      });
-
-      ffmpegProcess.on('error', (error) => {
-        console.error('Error in ffmpeg process', error);
-        reject(error);
-      });
-
-      ffmpegProcess.on('close', (code) => {
-        if (code === 0) {
-          this.logger.verbose('Audio converted to mp4');
-          const outputBuffer = Buffer.concat(outputChunks);
-          resolve(outputBuffer);
-        } else {
-          this.logger.error(`ffmpeg exited with code ${code}`);
-          this.logger.error(`ffmpeg stderr: ${stderrData}`);
-          reject(new Error(`ffmpeg exited with code ${code}: ${stderrData}`));
-        }
-      });
-
-      inputStream.pipe(ffmpegProcess.stdin);
-
-      inputStream.on('error', (err) => {
-        console.error('Error in inputStream', err);
-        ffmpegProcess.stdin.end();
-        reject(err);
-      });
-    });
-  }
-
-  public async processAudio(audio: string): Promise<Buffer> {
-    if (process.env.API_AUDIO_CONVERTER) {
-      this.logger.verbose('Using audio converter API');
-      const formData = new FormData();
-
+    try {
       if (isURL(audio)) {
-        formData.append('url', audio);
+        this.logger.verbose('Processing audio from URL');
+        const response = await axios.get(audio, { responseType: 'stream' });
+        inputStream = response.data;
       } else {
-        formData.append('base64', audio);
-      }
-
-      const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
-        headers: {
-          ...formData.getHeaders(),
-          apikey: process.env.API_AUDIO_CONVERTER_KEY,
-        },
-      });
-
-      if (!data.audio) {
-        throw new InternalServerErrorException('Failed to convert audio');
-      }
-
-      this.logger.verbose('Audio converted');
-      return Buffer.from(data.audio, 'base64');
-    } else {
-      let inputAudioStream: PassThrough;
-
-      if (isURL(audio)) {
-        const timestamp = new Date().getTime();
-        const url = `${audio}?timestamp=${timestamp}`;
-
-        const config: any = {
-          responseType: 'stream',
-        };
-
-        const response = await axios.get(url, config);
-        inputAudioStream = response.data.pipe(new PassThrough());
-      } else {
+        this.logger.verbose('Processing audio from base64');
         const audioBuffer = Buffer.from(audio, 'base64');
-        inputAudioStream = new PassThrough();
-        inputAudioStream.end(audioBuffer);
+        inputStream = new PassThrough();
+        inputStream.end(audioBuffer);
       }
 
-      return new Promise((resolve, reject) => {
-        const outputAudioStream = new PassThrough();
-        const chunks: Buffer[] = [];
+      return new Promise<Buffer>((resolve, reject) => {
+        const ffmpegProcess = spawn(ffmpegPath.path, [
+          '-i',
+          'pipe:0',
+          '-vn',
+          '-ab',
+          '128k',
+          '-ar',
+          '44100',
+          '-f',
+          'mp4',
+          '-movflags',
+          'frag_keyframe+empty_moov',
+          'pipe:1',
+        ]);
 
-        outputAudioStream.on('data', (chunk) => chunks.push(chunk));
-        outputAudioStream.on('end', () => {
-          const outputBuffer = Buffer.concat(chunks);
-          resolve(outputBuffer);
+        const outputChunks: Buffer[] = [];
+        let stderrData = '';
+
+        ffmpegProcess.stdout.on('data', (chunk) => {
+          outputChunks.push(chunk);
         });
 
-        outputAudioStream.on('error', (error) => {
-          console.log('error', error);
+        ffmpegProcess.stderr.on('data', (data) => {
+          stderrData += data.toString();
+          this.logger.verbose(`ffmpeg stderr: ${data}`);
+        });
+
+        ffmpegProcess.on('error', (error) => {
+          this.logger.error('FFmpeg process error:');
+          this.logger.error(error);
           reject(error);
         });
 
-        ffmpeg.setFfmpegPath(ffmpegPath.path);
+        ffmpegProcess.on('close', (code) => {
+          if (code === 0) {
+            this.logger.verbose('Audio converted to mp4 successfully');
+            const outputBuffer = Buffer.concat(outputChunks);
+            resolve(outputBuffer);
+          } else {
+            this.logger.error(`FFmpeg process failed with code ${code}`);
+            this.logger.error(`FFmpeg stderr output: ${stderrData}`);
+            reject(new Error(`FFmpeg process failed with code ${code}: ${stderrData}`));
+          }
+        });
 
-        ffmpeg(inputAudioStream)
-          .outputFormat('ogg')
-          .noVideo()
-          .audioCodec('libopus')
-          .addOutputOptions('-avoid_negative_ts make_zero')
-          .audioChannels(1)
-          .pipe(outputAudioStream, { end: true })
-          .on('error', function (error) {
-            console.log('error', error);
+        inputStream.pipe(ffmpegProcess.stdin);
+
+        inputStream.on('error', (err) => {
+          this.logger.error('Input stream error:');
+          this.logger.error(err);
+          ffmpegProcess.stdin.end();
+          reject(err);
+        });
+      });
+    } catch (error) {
+      this.logger.error('Error in processAudioMp4:');
+      this.logger.error(error);
+      throw error;
+    }
+  }
+
+  public async processAudio(audio: string): Promise<Buffer> {
+    try {
+      if (process.env.API_AUDIO_CONVERTER) {
+        this.logger.verbose('Using audio converter API');
+        const formData = new FormData();
+
+        if (isURL(audio)) {
+          formData.append('url', audio);
+        } else {
+          formData.append('base64', audio);
+        }
+
+        const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
+          headers: {
+            ...formData.getHeaders(),
+            apikey: process.env.API_AUDIO_CONVERTER_KEY,
+          },
+        });
+
+        if (!data.audio) {
+          this.logger.error('Audio converter API failed to return audio data');
+          throw new InternalServerErrorException('Failed to convert audio');
+        }
+
+        this.logger.verbose('Audio converted successfully via API');
+        return Buffer.from(data.audio, 'base64');
+      } else {
+        let inputAudioStream: PassThrough;
+
+        if (isURL(audio)) {
+          this.logger.verbose('Processing audio from URL');
+          const timestamp = new Date().getTime();
+          const url = `${audio}?timestamp=${timestamp}`;
+
+          const config: any = {
+            responseType: 'stream',
+          };
+
+          const response = await axios.get(url, config);
+          inputAudioStream = response.data.pipe(new PassThrough());
+        } else {
+          this.logger.verbose('Processing audio from base64');
+          const audioBuffer = Buffer.from(audio, 'base64');
+          inputAudioStream = new PassThrough();
+          inputAudioStream.end(audioBuffer);
+        }
+
+        return new Promise((resolve, reject) => {
+          const outputAudioStream = new PassThrough();
+          const chunks: Buffer[] = [];
+
+          outputAudioStream.on('data', (chunk) => chunks.push(chunk));
+          outputAudioStream.on('end', () => {
+            this.logger.verbose('Audio stream processing completed');
+            const outputBuffer = Buffer.concat(chunks);
+            resolve(outputBuffer);
+          });
+
+          outputAudioStream.on('error', (error) => {
+            this.logger.error('Output stream error:');
+            this.logger.error(error);
             reject(error);
           });
-      });
+
+          ffmpeg.setFfmpegPath(ffmpegPath.path);
+
+          ffmpeg(inputAudioStream)
+            .outputFormat('ogg')
+            .noVideo()
+            .audioCodec('libopus')
+            .addOutputOptions('-avoid_negative_ts make_zero')
+            .audioChannels(1)
+            .pipe(outputAudioStream, { end: true })
+            .on('error', function (error) {
+              this.logger.error('FFmpeg processing error:');
+              this.logger.error(error);
+              reject(error);
+            });
+        });
+      }
+    } catch (error) {
+      this.logger.error('Error in processAudio:');
+      this.logger.error(error);
+      throw error;
     }
   }
 

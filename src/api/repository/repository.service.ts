@@ -20,8 +20,33 @@ export class PrismaRepository extends PrismaClient {
       log: ['error', 'warn'],
     });
 
-    // Configure Prisma Client to use connection pooling
-    this.$use(async (params, next) => {
+    // Configure Prisma Client to use connection pooling and handle deadlocks
+    this.$use(async (params: any, next) => {
+      // Define operations that should be wrapped in transactions
+      const transactionOperations = {
+        create: true,
+        createMany: true,
+        update: true,
+        updateMany: true,
+        delete: true,
+        deleteMany: true,
+      };
+
+      // Check if this is a write operation that should be in a transaction
+      const shouldUseTransaction = params.action in transactionOperations && !params.runInTransaction; // Prevent recursive transactions
+
+      if (shouldUseTransaction) {
+        // Run in transaction with retry logic
+        return this.$transaction(async (tx) => {
+          // Set a flag to prevent recursive transactions
+          params.runInTransaction = true;
+          // Replace the client instance with the transaction
+          params.client = tx;
+          return this.executeWithRetry(() => next(params));
+        });
+      }
+
+      // For read operations or operations already in a transaction
       return this.executeWithRetry(() => next(params));
     });
   }
@@ -47,7 +72,7 @@ export class PrismaRepository extends PrismaClient {
     }
   }
 
-  // Helper method to safely execute database operations with retries
+  // Enhanced retry logic with better deadlock handling
   private async executeWithRetry<T>(operation: () => Promise<T>, maxRetries = 3, initialDelay = 100): Promise<T> {
     let attempt = 0;
     let lastError;
@@ -59,22 +84,44 @@ export class PrismaRepository extends PrismaClient {
         lastError = error;
         attempt++;
 
-        // Only retry on connection-related errors
-        if (
-          !error?.message?.includes('too many clients already') &&
-          !error?.message?.includes('Connection pool timeout')
-        ) {
+        // Check for specific error types
+        const isDeadlock =
+          error?.message?.includes('deadlock detected') ||
+          error?.code === '40P01' || // PostgreSQL deadlock error code
+          error?.code === 1213; // MySQL deadlock error code
+
+        const isConnectionError =
+          error?.message?.includes('too many clients already') || error?.message?.includes('Connection pool timeout');
+
+        // Retry on deadlocks or connection errors
+        if (!isDeadlock && !isConnectionError) {
           throw error;
         }
 
         if (attempt < maxRetries) {
-          const delay = initialDelay * Math.pow(2, attempt - 1);
+          // Use a longer delay for deadlocks to allow transactions to complete
+          const baseDelay = isDeadlock ? initialDelay * 2 : initialDelay;
+          const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+
+          this.logger.warn(
+            `Database operation failed with ${isDeadlock ? 'deadlock' : 'connection error'}. ` +
+              `Retrying (attempt ${attempt}/${maxRetries}) after ${delay}ms...`,
+          );
+
           await new Promise((resolve) => setTimeout(resolve, delay));
-          this.logger.warn(`Retrying database operation after connection error (attempt ${attempt}/${maxRetries})`);
         }
       }
     }
 
     throw lastError;
+  }
+
+  // Helper method for explicit transactions when needed
+  public async withTransaction<T>(operation: (tx: PrismaClient) => Promise<T>, maxRetries = 3): Promise<T> {
+    return this.executeWithRetry(
+      () => this.$transaction(operation),
+      maxRetries,
+      200, // Start with a longer delay for explicit transactions
+    );
   }
 }
