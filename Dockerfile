@@ -1,4 +1,4 @@
-FROM node:18-alpine3.16 AS builder
+FROM node:18.18-alpine3.16 AS builder
 
 # Declare build arguments
 ARG SERVER_TYPE
@@ -126,7 +126,7 @@ RUN ./Docker/scripts/generate_database.sh
 
 RUN npm run build
 
-FROM node:18-alpine3.16 AS final
+FROM node:18.18-alpine3.16 AS final
 
 RUN apk update && \
     apk add tzdata ffmpeg bash openssl
