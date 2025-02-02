@@ -2905,90 +2905,103 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async processAudio(audio: string): Promise<Buffer> {
-    try {
-      if (process.env.API_AUDIO_CONVERTER) {
-        this.logger.verbose('Using audio converter API');
-        const formData = new FormData();
+    const maxRetries = 10;
+    const retryDelay = 1000; // 1 second
 
-        if (isURL(audio)) {
-          formData.append('url', audio);
-        } else {
-          formData.append('base64', audio);
-        }
+    const executeWithRetry = async (attempt = 1): Promise<Buffer> => {
+      try {
+        if (process.env.API_AUDIO_CONVERTER) {
+          this.logger.verbose('Using audio converter API');
+          const formData = new FormData();
 
-        const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
-          headers: {
-            ...formData.getHeaders(),
-            apikey: process.env.API_AUDIO_CONVERTER_KEY,
-          },
-        });
+          if (isURL(audio)) {
+            formData.append('url', audio);
+          } else {
+            formData.append('base64', audio);
+          }
 
-        if (!data.audio) {
-          this.logger.error('Audio converter API failed to return audio data');
-          throw new InternalServerErrorException('Failed to convert audio');
-        }
-
-        this.logger.verbose('Audio converted successfully via API');
-        return Buffer.from(data.audio, 'base64');
-      } else {
-        let inputAudioStream: PassThrough;
-
-        if (isURL(audio)) {
-          this.logger.verbose('Processing audio from URL');
-          const timestamp = new Date().getTime();
-          const url = `${audio}?timestamp=${timestamp}`;
-
-          const config: any = {
-            responseType: 'stream',
-          };
-
-          const response = await axios.get(url, config);
-          inputAudioStream = response.data.pipe(new PassThrough());
-        } else {
-          this.logger.verbose('Processing audio from base64');
-          const audioBuffer = Buffer.from(audio, 'base64');
-          inputAudioStream = new PassThrough();
-          inputAudioStream.end(audioBuffer);
-        }
-
-        return new Promise((resolve, reject) => {
-          const outputAudioStream = new PassThrough();
-          const chunks: Buffer[] = [];
-
-          outputAudioStream.on('data', (chunk) => chunks.push(chunk));
-          outputAudioStream.on('end', () => {
-            this.logger.verbose('Audio stream processing completed');
-            const outputBuffer = Buffer.concat(chunks);
-            resolve(outputBuffer);
+          const { data } = await axios.post(process.env.API_AUDIO_CONVERTER, formData, {
+            headers: {
+              ...formData.getHeaders(),
+              apikey: process.env.API_AUDIO_CONVERTER_KEY,
+            },
           });
 
-          outputAudioStream.on('error', (error) => {
-            this.logger.error('Output stream error:');
-            this.logger.error(error);
-            reject(error);
-          });
+          if (!data.audio) {
+            this.logger.error('Audio converter API failed to return audio data');
+            throw new InternalServerErrorException('Failed to convert audio');
+          }
 
-          ffmpeg.setFfmpegPath(ffmpegPath.path);
+          this.logger.verbose('Audio converted successfully via API');
+          return Buffer.from(data.audio, 'base64');
+        } else {
+          let inputAudioStream: PassThrough;
 
-          ffmpeg(inputAudioStream)
-            .outputFormat('ogg')
-            .noVideo()
-            .audioCodec('libopus')
-            .addOutputOptions('-avoid_negative_ts make_zero')
-            .audioChannels(1)
-            .pipe(outputAudioStream, { end: true })
-            .on('error', function (error) {
-              this.logger.error('FFmpeg processing error:');
+          if (isURL(audio)) {
+            this.logger.verbose('Processing audio from URL');
+            const timestamp = new Date().getTime();
+            const url = `${audio}?timestamp=${timestamp}`;
+
+            const config: any = {
+              responseType: 'stream',
+            };
+
+            const response = await axios.get(url, config);
+            inputAudioStream = response.data.pipe(new PassThrough());
+          } else {
+            this.logger.verbose('Processing audio from base64');
+            const audioBuffer = Buffer.from(audio, 'base64');
+            inputAudioStream = new PassThrough();
+            inputAudioStream.end(audioBuffer);
+          }
+
+          return new Promise((resolve, reject) => {
+            const outputAudioStream = new PassThrough();
+            const chunks: Buffer[] = [];
+
+            outputAudioStream.on('data', (chunk) => chunks.push(chunk));
+            outputAudioStream.on('end', () => {
+              this.logger.verbose('Audio stream processing completed');
+              const outputBuffer = Buffer.concat(chunks);
+              resolve(outputBuffer);
+            });
+
+            outputAudioStream.on('error', (error) => {
+              this.logger.error('Output stream error:');
               this.logger.error(error);
               reject(error);
             });
-        });
+
+            ffmpeg.setFfmpegPath(ffmpegPath.path);
+
+            ffmpeg(inputAudioStream)
+              .outputFormat('ogg')
+              .noVideo()
+              .audioCodec('libopus')
+              .addOutputOptions('-avoid_negative_ts make_zero')
+              .audioChannels(1)
+              .pipe(outputAudioStream, { end: true })
+              .on('error', function (error) {
+                this.logger.error('FFmpeg processing error:');
+                this.logger.error(error);
+                reject(error);
+              });
+          });
+        }
+      } catch (error) {
+        if (attempt < maxRetries) {
+          this.logger.warn(`Attempt ${attempt} failed, retrying in ${retryDelay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          return executeWithRetry(attempt + 1);
+        }
+        this.logger.error(`All ${maxRetries} attempts failed`);
+        this.logger.error('Error in processAudio:');
+        this.logger.error(error);
+        throw error;
       }
-    } catch (error) {
-      this.logger.error('Error in processAudio:');
-      this.logger.error(error);
-      throw error;
-    }
+    };
+
+    return executeWithRetry();
   }
 
   public async audioWhatsapp(data: SendAudioDto, file?: any, isIntegration = false) {
