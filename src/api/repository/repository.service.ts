@@ -73,7 +73,7 @@ export class PrismaRepository extends PrismaClient {
   }
 
   // Enhanced retry logic with better deadlock handling
-  private async executeWithRetry<T>(operation: () => Promise<T>, maxRetries = 3, initialDelay = 100): Promise<T> {
+  private async executeWithRetry<T>(operation: () => Promise<T>, maxRetries = 5, initialDelay = 100): Promise<T> {
     let attempt = 0;
     let lastError;
 
@@ -100,7 +100,7 @@ export class PrismaRepository extends PrismaClient {
 
         if (attempt < maxRetries) {
           // Use a longer delay for deadlocks to allow transactions to complete
-          const baseDelay = isDeadlock ? initialDelay * 2 : initialDelay;
+          const baseDelay = isDeadlock ? initialDelay * 3 : initialDelay; // Exponential backoff
           const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
 
           this.logger.warn(
@@ -117,7 +117,7 @@ export class PrismaRepository extends PrismaClient {
   }
 
   // Helper method for explicit transactions when needed
-  public async withTransaction<T>(operation: (tx: PrismaClient) => Promise<T>, maxRetries = 3): Promise<T> {
+  public async withTransaction<T>(operation: (tx: PrismaClient) => Promise<T>, maxRetries = 5): Promise<T> {
     return this.executeWithRetry(
       () => this.$transaction(operation),
       maxRetries,
