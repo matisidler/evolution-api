@@ -2612,6 +2612,12 @@ export class BaileysStartupService extends ChannelStartupService {
           mediaMessage.fileName = 'video.mp4';
         }
 
+        // Add random component to filename to ensure uniqueness
+        const fileExt = mediaMessage.fileName.split('.').pop();
+        const fileNameWithoutExt = mediaMessage.fileName.split('.').slice(0, -1).join('.');
+        const randomComponent = Math.random().toString(36).substring(2, 8);
+        mediaMessage.fileName = `${fileNameWithoutExt}-${randomComponent}.${fileExt}`;
+
         let mimetype: string | false;
 
         if (mediaMessage.mimetype) {
