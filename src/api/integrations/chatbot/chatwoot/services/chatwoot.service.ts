@@ -65,7 +65,7 @@ export class ChatwootService {
     const provider = await this.waMonitor.waInstances[instance.instanceName]?.findChatwoot();
 
     if (!provider) {
-      this.logger.warn('provider not found');
+      this.logger.warn(`provider not found for instance: ${instance}`);
       return null;
     }
 

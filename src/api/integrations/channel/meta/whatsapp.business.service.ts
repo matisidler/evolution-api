@@ -622,7 +622,7 @@ export class BusinessStartupService extends ChannelStartupService {
               remoteJid: key.remoteJid,
               fromMe: key.fromMe,
               participant: key?.remoteJid,
-              status: item.status.toUpperCase(),
+              status: item.status ? item.status.toUpperCase() : 'PENDING',
               instanceId: this.instanceId,
             };
 

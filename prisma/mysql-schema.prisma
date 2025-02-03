@@ -166,7 +166,7 @@ model Message {
   MessageUpdate                MessageUpdate[]
   Media                        Media?
   webhookUrl                   String?         @db.VarChar(500)
-  status                       String?         @db.VarChar(30)
+  status                       String?         @db.VarChar(30) @default("PENDING")
 
   sessionId String?
   session   IntegrationSession? @relation(fields: [sessionId], references: [id])
@@ -180,7 +180,7 @@ model MessageUpdate {
   fromMe      Boolean
   participant String?  @db.VarChar(100)
   pollUpdates Json?    @db.Json
-  status      String   @db.VarChar(30)
+  status      String   @db.VarChar(30) @default("PENDING")
   Message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId   String
   Instance    Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)

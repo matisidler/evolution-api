@@ -1469,6 +1469,7 @@ export class BaileysStartupService extends ChannelStartupService {
               remoteJid: key.remoteJid,
               fromMe: key.fromMe,
               participant: key?.remoteJid,
+              pollUpdates: pollUpdates,
               status: 'DELETED',
               instanceId: this.instanceId,
             };
@@ -1509,7 +1510,7 @@ export class BaileysStartupService extends ChannelStartupService {
             remoteJid: key.remoteJid,
             fromMe: key.fromMe,
             participant: key?.remoteJid,
-            status: status[update.status],
+            status: status[update.status] || findMessage.status || 'PENDING',
             pollUpdates,
             instanceId: this.instanceId,
           };
@@ -3667,7 +3668,7 @@ export class BaileysStartupService extends ChannelStartupService {
             instanceId: message.instanceId,
             key: message.key,
             messageType: message.messageType,
-            status: message.status,
+            status: message.status || 'DELETED',
             source: message.source,
             messageTimestamp: message.messageTimestamp,
             pushName: message.pushName,
