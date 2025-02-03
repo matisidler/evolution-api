@@ -18,6 +18,10 @@ export class PrismaRepository extends PrismaClient {
         },
       },
       log: ['error', 'warn'],
+      transactionOptions: {
+        maxWait: 15000, // 15 seconds max waiting time
+        timeout: 15000, // 15 seconds timeout
+      },
     });
 
     // Configure Prisma Client to use connection pooling and handle deadlocks
