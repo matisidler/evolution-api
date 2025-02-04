@@ -637,37 +637,43 @@ export class ChatwootService {
             );
           }
         }
-
-        const picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(chatId);
-        this.logger.verbose(`Contact profile picture URL: ${JSON.stringify(picture_url)}`);
+        let picture_url = null;
+        try {
+          picture_url = await this.waMonitor.waInstances[instance.instanceName].profilePicture(chatId);
+          this.logger.verbose(`Contact profile picture URL: ${JSON.stringify(picture_url)}`);
+        } catch {
+          picture_url = null;
+        }
 
         let contact = await this.findContact(instance, chatId);
         this.logger.verbose(`Found contact: ${JSON.stringify(contact)}`);
 
         if (contact) {
           if (!body.key.fromMe) {
-            const waProfilePictureFile =
-              picture_url?.profilePictureUrl?.split('#')[0].split('?')[0].split('/').pop() || '';
-            const chatwootProfilePictureFile = contact?.thumbnail?.split('#')[0].split('?')[0].split('/').pop() || '';
-            const pictureNeedsUpdate = waProfilePictureFile !== chatwootProfilePictureFile;
-            const nameNeedsUpdate =
-              !contact.name ||
-              contact.name === chatId ||
-              (`+${chatId}`.startsWith('+55')
-                ? this.getNumbers(`+${chatId}`).some(
-                    (v) => contact.name === v || contact.name === v.substring(3) || contact.name === v.substring(1),
-                  )
-                : false);
+            if (picture_url) {
+              const waProfilePictureFile =
+                picture_url?.profilePictureUrl?.split('#')[0].split('?')[0].split('/').pop() || '';
+              const chatwootProfilePictureFile = contact?.thumbnail?.split('#')[0].split('?')[0].split('/').pop() || '';
+              const pictureNeedsUpdate = waProfilePictureFile !== chatwootProfilePictureFile;
+              const nameNeedsUpdate =
+                !contact.name ||
+                contact.name === chatId ||
+                (`+${chatId}`.startsWith('+55')
+                  ? this.getNumbers(`+${chatId}`).some(
+                      (v) => contact.name === v || contact.name === v.substring(3) || contact.name === v.substring(1),
+                    )
+                  : false);
 
-            this.logger.verbose(`Picture needs update: ${pictureNeedsUpdate}`);
-            this.logger.verbose(`Name needs update: ${nameNeedsUpdate}`);
+              this.logger.verbose(`Picture needs update: ${pictureNeedsUpdate}`);
+              this.logger.verbose(`Name needs update: ${nameNeedsUpdate}`);
 
-            if (pictureNeedsUpdate || nameNeedsUpdate) {
-              contact = await this.updateContact(instance, contact.id, {
-                ...(nameNeedsUpdate && { name: nameContact }),
-                ...(waProfilePictureFile === '' && { avatar: null }),
-                ...(pictureNeedsUpdate && { avatar_url: picture_url?.profilePictureUrl }),
-              });
+              if (pictureNeedsUpdate || nameNeedsUpdate) {
+                contact = await this.updateContact(instance, contact.id, {
+                  ...(nameNeedsUpdate && { name: nameContact }),
+                  ...(waProfilePictureFile === '' && { avatar: null }),
+                  ...(pictureNeedsUpdate && { avatar_url: picture_url?.profilePictureUrl }),
+                });
+              }
             }
           }
         } else {
@@ -678,7 +684,7 @@ export class ChatwootService {
             filterInbox.id,
             isGroup,
             nameContact,
-            picture_url.profilePictureUrl || null,
+            picture_url?.profilePictureUrl || null,
             jid,
           );
         }
